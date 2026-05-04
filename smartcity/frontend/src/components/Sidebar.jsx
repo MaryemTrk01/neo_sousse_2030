@@ -1,6 +1,6 @@
 import {
     LayoutDashboard, Cpu, Wrench, Wind, Terminal,
-    FileText, GitBranch, Map as MapIcon,
+    FileText, GitBranch,
     MessageSquare, BarChart3, Car
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,7 +14,6 @@ const menuItems = [
     { id: 'compiler', label: 'Compilateur NL', icon: Terminal },
     { id: 'reports', label: 'Rapports IA', icon: FileText },
     { id: 'automates', label: 'Automates', icon: GitBranch },
-    { id: 'map', label: 'Carte Urbaine', icon: MapIcon },
     { id: 'chat', label: 'ARIA Chat', icon: MessageSquare },
     { id: 'stats', label: 'Statistiques', icon: BarChart3 },
 ];

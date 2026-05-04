@@ -7,7 +7,6 @@ import QualiteAir from './components/QualiteAir';
 import Compilateur from './components/Compilateur';
 import Rapports from './components/Rapports';
 import Automates from './components/Automates';
-import CarteUrbaine from './components/CarteUrbaine';
 import ChatIA from './components/ChatIA';
 import Statistiques from './components/Statistiques';
 import Vehicules from './components/Vehicules';
@@ -174,8 +173,6 @@ function AppContent() {
                 return <Rapports {...props} />;
             case 'automates':
                 return <Automates {...props} />;
-            case 'map':
-                return <CarteUrbaine {...props} />;
             case 'chat':
                 return <ChatIA {...props} />;
             case 'stats':
