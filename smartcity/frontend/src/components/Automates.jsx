@@ -1,43 +1,76 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactFlow, {
     Background,
     Controls,
     MarkerType,
-    useNodesState,
     useEdgesState,
+    useNodesState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { GitBranch, Play, CheckCircle2, AlertCircle, Info, RefreshCcw } from 'lucide-react';
+import {
+    AlertCircle,
+    Car,
+    CheckCircle2,
+    Cpu,
+    GitBranch,
+    Play,
+    RefreshCcw,
+    ShieldCheck,
+    Wrench,
+} from 'lucide-react';
 import { useSocket } from '../SocketContext';
 
 const STATE_COLORS = {
-    'INACTIF': '#64748b', 'ACTIF': '#22c55e', 'SIGNALE': '#f59e0b', 'EN_MAINTENANCE': '#eab308', 'HORS_SERVICE': '#ef4444',
-    'DEMANDE': '#94a3b8', 'TECH1_ASSIGNE': '#3b82f6', 'TECH2_VALIDE': '#8b5cf6', 'IA_VALIDE': '#06b6d4', 'TERMINE': '#22c55e',
-    'STATIONNE': '#64748b', 'EN_ROUTE': '#3b82f6', 'EN_PANNE': '#ef4444', 'ARRIVE': '#22c55e',
+    INACTIF: '#64748b',
+    ACTIF: '#22c55e',
+    SIGNALE: '#f59e0b',
+    EN_MAINTENANCE: '#eab308',
+    HORS_SERVICE: '#ef4444',
+    DEMANDE: '#94a3b8',
+    TECH1_ASSIGNE: '#3b82f6',
+    TECH2_VALIDE: '#8b5cf6',
+    IA_VALIDE: '#06b6d4',
+    TERMINE: '#22c55e',
+    STATIONNE: '#64748b',
+    EN_ROUTE: '#3b82f6',
+    EN_PANNE: '#ef4444',
+    ARRIVE: '#22c55e',
 };
 
 const FSM_DEFS = {
     capteur: {
+        label: 'Capteurs',
+        icon: Cpu,
+        endpoint: 'capteurs',
+        accent: 'text-cyan-300',
         states: ['INACTIF', 'ACTIF', 'SIGNALE', 'EN_MAINTENANCE', 'HORS_SERVICE'],
         transitions: [
             { from: 'INACTIF', to: 'ACTIF', label: 'activer' },
             { from: 'ACTIF', to: 'SIGNALE', label: 'signaler' },
             { from: 'SIGNALE', to: 'EN_MAINTENANCE', label: 'maintenir' },
             { from: 'EN_MAINTENANCE', to: 'HORS_SERVICE', label: 'declarer_hs' },
-        ]
+        ],
     },
     intervention: {
+        label: 'Interventions',
+        icon: Wrench,
+        endpoint: 'interventions',
+        accent: 'text-amber-300',
         states: ['DEMANDE', 'TECH1_ASSIGNE', 'TECH2_VALIDE', 'IA_VALIDE', 'TERMINE'],
         transitions: [
             { from: 'DEMANDE', to: 'TECH1_ASSIGNE', label: 'assigner_tech1' },
             { from: 'TECH1_ASSIGNE', to: 'TECH2_VALIDE', label: 'valider_tech2' },
             { from: 'TECH2_VALIDE', to: 'IA_VALIDE', label: 'valider_ia' },
             { from: 'IA_VALIDE', to: 'TERMINE', label: 'terminer' },
-        ]
+        ],
     },
     vehicule: {
+        label: 'Vehicules',
+        icon: Car,
+        endpoint: 'vehicules',
+        accent: 'text-blue-300',
         states: ['STATIONNE', 'EN_ROUTE', 'EN_PANNE', 'ARRIVE'],
         transitions: [
             { from: 'STATIONNE', to: 'EN_ROUTE', label: 'demarrer' },
@@ -45,42 +78,52 @@ const FSM_DEFS = {
             { from: 'EN_ROUTE', to: 'ARRIVE', label: 'arriver' },
             { from: 'EN_PANNE', to: 'STATIONNE', label: 'reparer' },
             { from: 'ARRIVE', to: 'EN_ROUTE', label: 'demarrer' },
-        ]
-    }
+        ],
+    },
 };
+
+const formatState = (state) => (state || 'AUCUN').replaceAll('_', ' ');
 
 const getFlowData = (fsmKey, currentState) => {
     const def = FSM_DEFS[fsmKey];
-    const nodes = def.states.map((s, i) => {
-        const isActive = s === currentState;
+    const nodeGap = def.states.length <= 4 ? 230 : 190;
+
+    const nodes = def.states.map((state, index) => {
+        const isActive = state === currentState;
+        const color = STATE_COLORS[state] || '#40e0d0';
+
         return {
-            id: s,
-            data: { label: s.replace('_', ' ') },
-            position: { x: i * 180, y: i % 2 === 0 ? 50 : 150 },
+            id: state,
+            data: { label: formatState(state) },
+            position: { x: index * nodeGap, y: index % 2 === 0 ? 80 : 210 },
             style: {
-                background: isActive ? STATE_COLORS[s] : '#11141d',
-                color: isActive ? '#fff' : '#4b5563',
-                border: `2px solid ${isActive ? '#fff' : STATE_COLORS[s]}`,
-                borderRadius: '12px',
-                fontWeight: 'bold',
-                fontSize: '10px',
-                width: 130,
-                boxShadow: isActive ? `0 0 15px ${STATE_COLORS[s]}80` : 'none',
-            }
+                width: 156,
+                minHeight: 58,
+                borderRadius: 16,
+                border: `2px solid ${isActive ? '#ffffff' : `${color}88`}`,
+                background: isActive ? color : '#111827',
+                color: isActive ? '#ffffff' : '#cbd5e1',
+                fontWeight: 900,
+                fontSize: 11,
+                letterSpacing: 0,
+                boxShadow: isActive ? `0 0 28px ${color}66` : '0 10px 30px rgba(0,0,0,0.25)',
+            },
         };
     });
 
-    const edges = def.transitions.map((t, i) => {
-        const isSourceActive = t.from === currentState;
+    const edges = def.transitions.map((transition, index) => {
+        const isSourceActive = transition.from === currentState;
+        const color = isSourceActive ? '#40e0d0' : '#334155';
+
         return {
-            id: `e-${fsmKey}-${i}`,
-            source: t.from,
-            target: t.to,
-            label: t.label,
+            id: `edge-${fsmKey}-${index}`,
+            source: transition.from,
+            target: transition.to,
+            label: transition.label,
             animated: isSourceActive,
-            style: { stroke: isSourceActive ? '#3b82f6' : '#2d3748', strokeWidth: isSourceActive ? 3 : 1 },
-            labelStyle: { fill: '#94a3b8', fontSize: 8, fontWeight: 'bold' },
-            markerEnd: { type: MarkerType.ArrowClosed, color: isSourceActive ? '#3b82f6' : '#2d3748' },
+            style: { stroke: color, strokeWidth: isSourceActive ? 3 : 1.5 },
+            labelStyle: { fill: isSourceActive ? '#40e0d0' : '#94a3b8', fontSize: 10, fontWeight: 800 },
+            markerEnd: { type: MarkerType.ArrowClosed, color },
         };
     });
 
@@ -97,27 +140,30 @@ export default function Automates({ apiBase }) {
     const [loading, setLoading] = useState(false);
     const { socket } = useSocket();
 
+    const currentDef = FSM_DEFS[selectedFsm];
+    const EntityIcon = currentDef.icon;
+
     const fetchEntities = useCallback(async (refreshSelected = false) => {
         try {
-            const endpoint = selectedFsm === 'capteur' ? 'capteurs' : (selectedFsm === 'intervention' ? 'interventions' : 'vehicules');
-            const res = await axios.get(`${apiBase}/${endpoint}`);
-            const list = res.data[endpoint] || [];
+            const res = await axios.get(`${apiBase}/${FSM_DEFS[selectedFsm].endpoint}`);
+            const list = res.data[FSM_DEFS[selectedFsm].endpoint] || [];
             setEntities(list);
-            
+
             if (refreshSelected || !selectedEntity) {
-                if (list.length > 0) setSelectedEntity(list[0]);
-                else setSelectedEntity(null);
+                setSelectedEntity(list[0] || null);
             } else {
-                // Mettre à jour l'entité sélectionnée avec ses nouvelles données
-                const updated = list.find(e => e.id === selectedEntity.id);
+                const updated = list.find((entity) => entity.id === selectedEntity.id);
                 if (updated) setSelectedEntity(updated);
             }
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+        }
     }, [apiBase, selectedFsm, selectedEntity]);
 
     useEffect(() => {
+        setValidation(null);
         fetchEntities(true);
-    }, [selectedFsm]); // Seul changement de type d'automate reset la sélection
+    }, [selectedFsm]);
 
     useEffect(() => {
         const timer = setInterval(() => fetchEntities(false), 60000);
@@ -125,176 +171,289 @@ export default function Automates({ apiBase }) {
     }, [fetchEntities]);
 
     useEffect(() => {
-        if (socket) {
-            const handleStatusChange = (data) => {
-                if (data.entity === selectedFsm) {
-                    setEntities(prev => prev.map(e => (
-                        e.id === data.id ? { ...e, statut: data.new_status } : e
-                    )));
-                    setSelectedEntity(prev => (
-                        prev?.id === data.id ? { ...prev, statut: data.new_status } : prev
-                    ));
-                    fetchEntities(false); // Rafraîchir sans reset la sélection
-                }
-            };
-            socket.on('status_change', handleStatusChange);
-            return () => socket.off('status_change', handleStatusChange);
-        }
+        if (!socket) return undefined;
+
+        const handleStatusChange = (data) => {
+            if (data.entity !== selectedFsm) return;
+
+            setEntities((prev) => prev.map((entity) => (
+                entity.id === data.id ? { ...entity, statut: data.new_status } : entity
+            )));
+            setSelectedEntity((prev) => (
+                prev?.id === data.id ? { ...prev, statut: data.new_status } : prev
+            ));
+            fetchEntities(false);
+        };
+
+        socket.on('status_change', handleStatusChange);
+        return () => socket.off('status_change', handleStatusChange);
     }, [socket, selectedFsm, fetchEntities]);
 
     useEffect(() => {
-        if (selectedEntity) {
-            const { nodes: n, edges: e } = getFlowData(selectedFsm, selectedEntity.statut);
-            setNodes(n);
-            setEdges(e);
-        } else {
-            const { nodes: n, edges: e } = getFlowData(selectedFsm, null);
-            setNodes(n);
-            setEdges(e);
-        }
+        const { nodes: flowNodes, edges: flowEdges } = getFlowData(selectedFsm, selectedEntity?.statut || null);
+        setNodes(flowNodes);
+        setEdges(flowEdges);
     }, [selectedEntity, selectedFsm, setNodes, setEdges]);
+
+    const availableTransitions = useMemo(() => (
+        currentDef.transitions.filter((transition) => transition.from === selectedEntity?.statut)
+    ), [currentDef.transitions, selectedEntity?.statut]);
+
+    const statusCounts = useMemo(() => (
+        entities.reduce((acc, entity) => {
+            acc[entity.statut] = (acc[entity.statut] || 0) + 1;
+            return acc;
+        }, {})
+    ), [entities]);
 
     const handleTransition = async (trigger, nextState) => {
         if (!selectedEntity) return;
+
         setLoading(true);
         try {
-            const endpoint = selectedFsm === 'capteur' ? 'capteurs' : (selectedFsm === 'vehicule' ? 'vehicules' : 'interventions');
-            const res = await axios.post(`${apiBase}/${endpoint}/${selectedEntity.id}/transition`, {
-                event: trigger
+            const res = await axios.post(`${apiBase}/${currentDef.endpoint}/${selectedEntity.id}/transition`, {
+                event: trigger,
             });
-            
+
             if (res.data.success) {
-                setSelectedEntity(prev => prev ? { ...prev, statut: res.data.new_status } : prev);
-                setEntities(prev => prev.map(e => (
-                    e.id === selectedEntity.id ? { ...e, statut: res.data.new_status } : e
+                setSelectedEntity((prev) => (prev ? { ...prev, statut: res.data.new_status } : prev));
+                setEntities((prev) => prev.map((entity) => (
+                    entity.id === selectedEntity.id ? { ...entity, statut: res.data.new_status } : entity
                 )));
-                // Le rafraîchissement se fera via le socket 'status_change'
-                setValidation({ valide: true, justification: `Transition vers ${nextState} approuvée par le système.` });
+                setValidation({
+                    valide: true,
+                    justification: `Transition ${formatState(selectedEntity.statut)} -> ${formatState(nextState)} appliquee avec succes.`,
+                });
             } else {
-                setValidation({ valide: false, justification: res.data.error || "Transition refusée." });
+                setValidation({ valide: false, justification: res.data.error || 'Transition refusee.' });
             }
-        } catch (err) { 
-            console.error(err); 
-            setValidation({ valide: false, justification: err.response?.data?.error || "Erreur lors de la transition." });
+        } catch (err) {
+            console.error(err);
+            setValidation({ valide: false, justification: err.response?.data?.error || 'Erreur lors de la transition.' });
+        } finally {
+            setLoading(false);
         }
-        finally { setLoading(false); }
     };
 
-    const availableTransitions = FSM_DEFS[selectedFsm].transitions.filter(t => t.from === selectedEntity?.statut);
-
     return (
-        <div className="space-y-8 animate-fade-in flex flex-col h-full">
-            <header className="flex justify-between items-end">
+        <div className="space-y-7 animate-fade-in">
+            <header className="flex flex-wrap items-end justify-between gap-6">
                 <div>
                     <h2 className="text-4xl font-black text-white tracking-tighter">
-                        Logique <span className="text-gradient">Automate</span>
+                        Automates <span className="text-gradient">Operationnels</span>
                     </h2>
-                    <p className="text-text-muted font-medium">Validation formelle des transitions d'états • Neo-Sousse Core</p>
+                    <p className="text-text-muted font-medium mt-2">
+                        Pilotage visuel des etats et validation des transitions Neo-Sousse.
+                    </p>
                 </div>
+
                 <div className="flex gap-2 p-1.5 neo-glass rounded-2xl border border-white/5">
-                    {['capteur', 'intervention', 'vehicule'].map(key => (
-                        <button key={key} onClick={() => setSelectedFsm(key)}
-                            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedFsm === key ? 'bg-turquoise text-black shadow-lg shadow-turquoise/20' : 'text-text-dim hover:text-white'}`}>
-                            {key}
-                        </button>
-                    ))}
+                    {Object.entries(FSM_DEFS).map(([key, def]) => {
+                        const Icon = def.icon;
+                        const active = selectedFsm === key;
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => setSelectedFsm(key)}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active
+                                    ? 'bg-turquoise text-black shadow-lg shadow-turquoise/20'
+                                    : 'text-text-dim hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                <Icon className="w-4 h-4" />
+                                {def.label}
+                            </button>
+                        );
+                    })}
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1 min-h-[650px]">
-                <div className="neo-card p-6 flex flex-col bg-black/40">
-                    <div className="flex justify-between items-center mb-8">
-                        <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Réseau de Flotte</h4>
-                        <button onClick={fetchEntities} className="p-2 hover:bg-white/5 rounded-lg transition-colors text-turquoise"><RefreshCcw className="w-4 h-4" /></button>
-                    </div>
-                    <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
-                        {entities.map(e => (
-                            <button key={e.id} onClick={() => setSelectedEntity(e)}
-                                className={`w-full p-4 rounded-2xl border text-left flex flex-col gap-2 transition-all group ${selectedEntity?.id === e.id ? 'bg-turquoise/10 border-turquoise/40' : 'bg-white/5 border-white/5 hover:border-white/10'}`}>
-                                <div className="flex justify-between items-center">
-                                    <span className={`text-xs font-black uppercase tracking-tight ${selectedEntity?.id === e.id ? 'text-turquoise' : 'text-white'}`}>ID #{e.id}</span>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-turquoise shadow-[0_0_5px_rgba(64,224,208,0.5)]" />
-                                </div>
-                                <span className="text-[9px] font-black uppercase tracking-widest text-text-dim opacity-60">{e.statut}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="lg:col-span-2 neo-card relative overflow-hidden flex flex-col bg-black/40">
-                    <div className="absolute top-6 left-6 z-10 p-3 neo-glass rounded-xl border border-white/10 flex items-center gap-3">
-                        <div className="w-2.5 h-2.5 rounded-full bg-turquoise animate-pulse" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Simulation Temps-Réel</span>
+            <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_320px] gap-7 min-h-[720px]">
+                <aside className="neo-card p-5 bg-black/40 flex flex-col">
+                    <div className="flex items-center justify-between mb-5">
+                        <div>
+                            <p className="text-[10px] text-text-dim font-black uppercase tracking-[0.2em]">Entites</p>
+                            <h3 className="text-xl font-black text-white mt-1">{currentDef.label}</h3>
+                        </div>
+                        <button
+                            onClick={() => fetchEntities(false)}
+                            className="p-2 rounded-xl border border-white/10 text-turquoise hover:bg-white/5 transition-colors"
+                            title="Rafraichir"
+                        >
+                            <RefreshCcw className="w-4 h-4" />
+                        </button>
                     </div>
 
-                    <div className="flex-1">
-                        <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} fitView nodesDraggable={false} zoomOnScroll={false} panOnScroll={true}>
-                            <Background color="rgba(255,255,255,0.03)" gap={24} />
+                    <div className="grid grid-cols-2 gap-3 mb-5">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Total</p>
+                            <p className="text-2xl font-black text-white mt-1">{entities.length}</p>
+                        </div>
+                        <div className="rounded-2xl border border-turquoise/20 bg-turquoise/[0.04] p-4">
+                            <p className="text-[10px] font-black text-turquoise uppercase tracking-widest">Selection</p>
+                            <p className="text-2xl font-black text-white mt-1">#{selectedEntity?.id || '--'}</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar pr-1">
+                        {entities.map((entity) => {
+                            const active = selectedEntity?.id === entity.id;
+                            const color = STATE_COLORS[entity.statut] || '#40e0d0';
+                            return (
+                                <button
+                                    key={entity.id}
+                                    onClick={() => setSelectedEntity(entity)}
+                                    className={`w-full p-4 rounded-2xl border text-left transition-all ${active
+                                        ? 'bg-turquoise/10 border-turquoise/40 shadow-lg shadow-turquoise/5'
+                                        : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/10'
+                                        }`}
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className={`text-sm font-black ${active ? 'text-turquoise' : 'text-white'}`}>ID #{entity.id}</span>
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                                    </div>
+                                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-text-dim">
+                                        {formatState(entity.statut)}
+                                    </p>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </aside>
+
+                <main className="neo-card bg-black/40 overflow-hidden flex flex-col">
+                    <div className="px-7 py-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl border border-turquoise/20 bg-turquoise/10 flex items-center justify-center">
+                                <EntityIcon className={`w-6 h-6 ${currentDef.accent}`} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Etat courant</p>
+                                <h3 className="text-2xl font-black text-white tracking-tight">
+                                    {formatState(selectedEntity?.statut)}
+                                </h3>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            {currentDef.states.map((state) => (
+                                <span
+                                    key={state}
+                                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white/70"
+                                >
+                                    <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: STATE_COLORS[state] }} />
+                                    {formatState(state)}: {statusCounts[state] || 0}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="relative flex-1 min-h-[470px]">
+                        <div className="absolute left-6 top-6 z-10 rounded-2xl border border-white/10 bg-bg-deep/80 px-4 py-2 backdrop-blur-xl">
+                            <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-turquoise animate-pulse" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Diagramme temps reel</span>
+                            </div>
+                        </div>
+                        <ReactFlow
+                            nodes={nodes}
+                            edges={edges}
+                            onNodesChange={onNodesChange}
+                            onEdgesChange={onEdgesChange}
+                            fitView
+                            nodesDraggable={false}
+                            zoomOnScroll={false}
+                            panOnScroll
+                        >
+                            <Background color="rgba(255,255,255,0.04)" gap={28} />
                             <Controls className="!bg-bg-deep !border-white/10 !rounded-xl !shadow-2xl" />
                         </ReactFlow>
                     </div>
 
-                    <div className="p-8 border-t border-white/5 bg-gradient-to-t from-bg-deep to-transparent">
-                        <div className="flex justify-between items-center">
-                            <div className="space-y-4">
-                                <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Actions de Transition Sécurisées</p>
-                                <div className="flex gap-3">
-                                    {availableTransitions.length > 0 ? availableTransitions.map((t, idx) => (
-                                        <button key={idx} onClick={() => handleTransition(t.label, t.to)} disabled={loading}
-                                            className="btn-primary flex items-center gap-3 px-6 py-3 shadow-turquoise/20">
-                                            <Play className="w-4 h-4" />
-                                            <span className="font-black uppercase tracking-widest text-[10px]">{t.label}</span>
-                                        </button>
-                                    )) : <span className="text-xs text-text-muted font-bold italic opacity-40 uppercase tracking-widest">Aucune transition formelle autorisée</span>}
-                                </div>
+                    <div className="p-6 border-t border-white/5 bg-gradient-to-t from-bg-deep to-transparent">
+                        <div className="flex flex-wrap items-center justify-between gap-5">
+                            <div>
+                                <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Transitions disponibles</p>
+                                <p className="text-sm text-white/60 mt-1">Choisissez une action valide pour l'entite selectionnee.</p>
                             </div>
-                            {loading && (
-                                <div className="flex items-center gap-3 text-turquoise text-[10px] font-black animate-pulse uppercase tracking-[0.2em]">
-                                    <RefreshCcw className="w-4 h-4 animate-spin" /> Audit IA en cours...
+                            <div className="flex flex-wrap gap-3">
+                                {availableTransitions.length > 0 ? availableTransitions.map((transition) => (
+                                    <button
+                                        key={`${transition.from}-${transition.to}-${transition.label}`}
+                                        onClick={() => handleTransition(transition.label, transition.to)}
+                                        disabled={loading}
+                                        className="btn-primary flex items-center gap-3 px-6 py-3 shadow-turquoise/20 disabled:opacity-40"
+                                    >
+                                        <Play className="w-4 h-4" />
+                                        <span className="font-black uppercase tracking-widest text-[10px]">{transition.label}</span>
+                                    </button>
+                                )) : (
+                                    <span className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-black uppercase tracking-widest text-text-dim">
+                                        Aucune transition disponible
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <aside className="space-y-7">
+                    <section className="neo-card p-7 bg-gradient-to-br from-turquoise/5 to-transparent">
+                        <div className="flex items-center gap-3 mb-5">
+                            <GitBranch className="w-5 h-5 text-turquoise" />
+                            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Contexte</h3>
+                        </div>
+                        {selectedEntity ? (
+                            <div className="space-y-4">
+                                <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Entite</p>
+                                    <p className="mt-2 text-2xl font-black text-turquoise">#{selectedEntity.id}</p>
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                                <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Etat actuel</p>
+                                    <p className="mt-2 text-lg font-black text-white">{formatState(selectedEntity.statut)}</p>
+                                </div>
+                                <p className="text-sm leading-7 text-white/65">
+                                    Ce cycle autorise {availableTransitions.length} transition(s) depuis l'etat courant.
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-white/60">Selectionnez une entite pour afficher son contexte.</p>
+                        )}
+                    </section>
 
-                <div className="space-y-8">
-                    <div className="neo-card p-8 bg-gradient-to-br from-turquoise/5 to-transparent">
-                        <h4 className="text-[10px] font-black text-turquoise uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
-                            <GitBranch className="w-4 h-4" /> Analyse d'État
-                        </h4>
-                        <div className="p-6 bg-black/40 rounded-2xl border border-white/5 shadow-inner">
-                            <p className="text-[10px] text-text-dim uppercase font-black tracking-widest mb-3">Contexte Actuel</p>
-                            <p className="text-sm text-white/80 leading-relaxed font-bold">
-                                {selectedEntity ? (
-                                    <>L'entité #{selectedEntity.id} est verrouillée sur l'état <span className="text-turquoise">"{selectedEntity.statut}"</span>. Ce cycle autorise {availableTransitions.length} mutations logiques.</>
-                                ) : <>Sélectionnez une entité pour auditer sa logique.</>}
-                            </p>
+                    <section className="neo-card p-7 border-dashed border-white/10 bg-white/[0.01]">
+                        <div className="flex items-center gap-3 mb-5">
+                            <ShieldCheck className="w-5 h-5 text-turquoise" />
+                            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Audit</h3>
                         </div>
-                    </div>
 
-                    <div className="neo-card p-8 flex-1 border-dashed border-white/10 bg-white/[0.01]">
-                        <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
-                            <Info className="w-4 h-4 text-turquoise" /> Rapport d'Audit IA
-                        </h4>
                         {validation ? (
-                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                                className={`p-6 rounded-2xl border ${validation.valide ? 'bg-turquoise/5 border-turquoise/30' : 'bg-rose-500/5 border-rose-500/30'}`}>
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className={`p-5 rounded-2xl border ${validation.valide ? 'bg-turquoise/5 border-turquoise/30' : 'bg-rose-500/5 border-rose-500/30'}`}
+                            >
                                 <div className="flex items-center gap-3 mb-4">
-                                    {validation.valide ? <CheckCircle2 className="w-5 h-5 text-turquoise" /> : <AlertCircle className="w-5 h-5 text-rose-400" />}
+                                    {validation.valide ? (
+                                        <CheckCircle2 className="w-5 h-5 text-turquoise" />
+                                    ) : (
+                                        <AlertCircle className="w-5 h-5 text-rose-400" />
+                                    )}
                                     <span className={`text-[11px] font-black uppercase tracking-widest ${validation.valide ? 'text-turquoise' : 'text-rose-400'}`}>
-                                        {validation.valide ? 'Approbation Formelle' : 'Violation Détectée'}
+                                        {validation.valide ? 'Transition approuvee' : 'Transition refusee'}
                                     </span>
                                 </div>
-                                <p className="text-xs text-white/70 italic leading-relaxed font-medium">"{validation.justification}"</p>
+                                <p className="text-sm text-white/70 leading-7">{validation.justification}</p>
                             </motion.div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-center opacity-20">
+                            <div className="flex flex-col items-center justify-center py-12 text-center opacity-30">
                                 <GitBranch className="w-12 h-12 mb-4" />
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Audit Prêt</p>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Audit pret</p>
                             </div>
                         )}
-                    </div>
-                </div>
+                    </section>
+                </aside>
             </div>
         </div>
     );
