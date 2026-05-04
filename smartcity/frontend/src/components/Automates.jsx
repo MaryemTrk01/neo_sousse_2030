@@ -425,7 +425,7 @@ export default function Automates({ apiBase }) {
                         </div>
                     </div>
 
-                    <div className="relative flex-1 min-h-[470px]">
+                    <div className="relative h-[520px] w-full">
                         <div className="absolute left-6 top-6 z-10 rounded-2xl border border-white/10 bg-bg-deep/80 px-4 py-2 backdrop-blur-xl">
                             <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-turquoise animate-pulse" />
@@ -433,11 +433,14 @@ export default function Automates({ apiBase }) {
                             </div>
                         </div>
                         <ReactFlow
+                            key={selectedFsm}
+                            className="h-full w-full"
                             nodes={nodes}
                             edges={edges}
                             onNodesChange={onNodesChange}
                             onEdgesChange={onEdgesChange}
                             fitView
+                            fitViewOptions={{ padding: 0.22, minZoom: 0.55, maxZoom: 1.05 }}
                             nodesDraggable={false}
                             zoomOnScroll={false}
                             panOnScroll
