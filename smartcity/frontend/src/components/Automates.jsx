@@ -345,7 +345,7 @@ export default function Automates({ apiBase }) {
                             </button>
                             <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/70" />
                             {stateMenuOpen && (
-                                <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-xl border border-white/10 bg-bg-deep shadow-2xl shadow-black/50">
+                                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-full overflow-hidden rounded-xl border border-white/15 bg-[#161b22] shadow-[0_24px_60px_rgba(0,0,0,0.9)]">
                                     {stateOptions.map((option) => {
                                         const active = option.value === filterState;
                                         return (
@@ -359,7 +359,7 @@ export default function Automates({ apiBase }) {
                                                 }}
                                                 className={`block w-full px-4 py-3 text-left text-xs font-black uppercase tracking-widest transition-colors ${active
                                                     ? 'bg-turquoise text-black'
-                                                    : 'bg-bg-deep text-white hover:bg-white/[0.06]'
+                                                    : 'bg-[#161b22] text-white hover:bg-[#1c2128]'
                                                     }`}
                                             >
                                                 {option.label}
