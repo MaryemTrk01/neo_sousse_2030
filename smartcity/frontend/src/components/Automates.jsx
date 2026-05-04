@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
     Background,
     Controls,
@@ -13,10 +13,13 @@ import {
     AlertCircle,
     Car,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
     Cpu,
     GitBranch,
     Play,
     RefreshCcw,
+    Search,
     ShieldCheck,
     Wrench,
 } from 'lucide-react';
@@ -134,10 +137,13 @@ export default function Automates({ apiBase }) {
     const [selectedFsm, setSelectedFsm] = useState('capteur');
     const [entities, setEntities] = useState([]);
     const [selectedEntity, setSelectedEntity] = useState(null);
+    const [filterText, setFilterText] = useState('');
+    const [filterState, setFilterState] = useState('ALL');
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [validation, setValidation] = useState(null);
     const [loading, setLoading] = useState(false);
+    const entityListRef = useRef(null);
     const { socket } = useSocket();
 
     const currentDef = FSM_DEFS[selectedFsm];
@@ -162,6 +168,8 @@ export default function Automates({ apiBase }) {
 
     useEffect(() => {
         setValidation(null);
+        setFilterText('');
+        setFilterState('ALL');
         fetchEntities(true);
     }, [selectedFsm]);
 
@@ -205,6 +213,21 @@ export default function Automates({ apiBase }) {
             return acc;
         }, {})
     ), [entities]);
+
+    const filteredEntities = useMemo(() => (
+        entities.filter((entity) => {
+            const matchesText = !filterText.trim() || String(entity.id).includes(filterText.trim());
+            const matchesState = filterState === 'ALL' || entity.statut === filterState;
+            return matchesText && matchesState;
+        })
+    ), [entities, filterText, filterState]);
+
+    const scrollEntities = (direction) => {
+        entityListRef.current?.scrollBy({
+            left: direction * 360,
+            behavior: 'smooth',
+        });
+    };
 
     const handleTransition = async (trigger, nextState) => {
         if (!selectedEntity) return;
@@ -268,60 +291,114 @@ export default function Automates({ apiBase }) {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_320px] gap-7 min-h-[720px]">
-                <aside className="neo-card p-5 bg-black/40 flex flex-col">
-                    <div className="flex items-center justify-between mb-5">
+            <section className="neo-card p-5 bg-black/40">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl border border-turquoise/20 bg-turquoise/10 flex items-center justify-center">
+                            <EntityIcon className={`w-6 h-6 ${currentDef.accent}`} />
+                        </div>
                         <div>
                             <p className="text-[10px] text-text-dim font-black uppercase tracking-[0.2em]">Entites</p>
-                            <h3 className="text-xl font-black text-white mt-1">{currentDef.label}</h3>
+                            <h3 className="text-xl font-black text-white">{currentDef.label}</h3>
                         </div>
+                        <div className="hidden sm:grid grid-cols-2 gap-3 ml-2">
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                                <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Total</p>
+                                <p className="text-xl font-black text-white">{entities.length}</p>
+                            </div>
+                            <div className="rounded-2xl border border-turquoise/20 bg-turquoise/[0.04] px-4 py-3">
+                                <p className="text-[10px] font-black text-turquoise uppercase tracking-widest">Selection</p>
+                                <p className="text-xl font-black text-white">#{selectedEntity?.id || '--'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                                <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Affiches</p>
+                                <p className="text-xl font-black text-white">{filteredEntities.length}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-text-dim" />
+                            <input
+                                value={filterText}
+                                onChange={(event) => setFilterText(event.target.value)}
+                                placeholder="ID"
+                                className="h-12 w-28 rounded-2xl border border-white/10 bg-white/[0.04] pl-10 pr-3 text-sm font-bold text-white outline-none transition-colors placeholder:text-text-dim focus:border-turquoise/40"
+                            />
+                        </div>
+                        <select
+                            value={filterState}
+                            onChange={(event) => setFilterState(event.target.value)}
+                            className="h-12 min-w-[190px] rounded-2xl border border-white/10 bg-bg-deep px-4 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors focus:border-turquoise/40"
+                        >
+                            <option value="ALL">Tous les etats</option>
+                            {currentDef.states.map((state) => (
+                                <option key={state} value={state}>{formatState(state)}</option>
+                            ))}
+                        </select>
+                        <button
+                            onClick={() => scrollEntities(-1)}
+                            className="p-3 rounded-2xl border border-white/10 text-white hover:text-turquoise hover:bg-white/5 transition-colors"
+                            title="Glisser a gauche"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => scrollEntities(1)}
+                            className="p-3 rounded-2xl border border-white/10 text-white hover:text-turquoise hover:bg-white/5 transition-colors"
+                            title="Glisser a droite"
+                        >
+                            <ChevronRight className="w-5 h-5" />
+                        </button>
                         <button
                             onClick={() => fetchEntities(false)}
-                            className="p-2 rounded-xl border border-white/10 text-turquoise hover:bg-white/5 transition-colors"
+                            className="p-3 rounded-2xl border border-white/10 text-turquoise hover:bg-white/5 transition-colors"
                             title="Rafraichir"
                         >
-                            <RefreshCcw className="w-4 h-4" />
+                            <RefreshCcw className="w-5 h-5" />
                         </button>
                     </div>
+                </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-5">
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                            <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Total</p>
-                            <p className="text-2xl font-black text-white mt-1">{entities.length}</p>
+                <div
+                    ref={entityListRef}
+                    className="flex gap-3 overflow-x-auto custom-scrollbar scroll-smooth pb-2"
+                >
+                    {filteredEntities.map((entity) => {
+                        const active = selectedEntity?.id === entity.id;
+                        const color = STATE_COLORS[entity.statut] || '#40e0d0';
+                        return (
+                            <button
+                                key={entity.id}
+                                onClick={() => setSelectedEntity(entity)}
+                                className={`min-w-[210px] p-4 rounded-2xl border text-left transition-all ${active
+                                    ? 'bg-turquoise/10 border-turquoise/40 shadow-lg shadow-turquoise/5'
+                                    : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/10'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className={`text-sm font-black ${active ? 'text-turquoise' : 'text-white'}`}>ID #{entity.id}</span>
+                                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                                </div>
+                                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-text-dim">
+                                    {formatState(entity.statut)}
+                                </p>
+                            </button>
+                        );
+                    })}
+                    {filteredEntities.length === 0 && (
+                        <div className="min-w-full rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+                            <p className="text-xs font-black uppercase tracking-widest text-text-dim">
+                                Aucun element trouve avec ce filtre
+                            </p>
                         </div>
-                        <div className="rounded-2xl border border-turquoise/20 bg-turquoise/[0.04] p-4">
-                            <p className="text-[10px] font-black text-turquoise uppercase tracking-widest">Selection</p>
-                            <p className="text-2xl font-black text-white mt-1">#{selectedEntity?.id || '--'}</p>
-                        </div>
-                    </div>
+                    )}
+                </div>
+            </section>
 
-                    <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar pr-1">
-                        {entities.map((entity) => {
-                            const active = selectedEntity?.id === entity.id;
-                            const color = STATE_COLORS[entity.statut] || '#40e0d0';
-                            return (
-                                <button
-                                    key={entity.id}
-                                    onClick={() => setSelectedEntity(entity)}
-                                    className={`w-full p-4 rounded-2xl border text-left transition-all ${active
-                                        ? 'bg-turquoise/10 border-turquoise/40 shadow-lg shadow-turquoise/5'
-                                        : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/10'
-                                        }`}
-                                >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <span className={`text-sm font-black ${active ? 'text-turquoise' : 'text-white'}`}>ID #{entity.id}</span>
-                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                                    </div>
-                                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-text-dim">
-                                        {formatState(entity.statut)}
-                                    </p>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </aside>
-
-                <main className="neo-card bg-black/40 overflow-hidden flex flex-col">
+            <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_390px] gap-7 items-start">
+                <main className="neo-card bg-black/40 overflow-hidden flex flex-col min-h-[650px]">
                     <div className="px-7 py-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-2xl border border-turquoise/20 bg-turquoise/10 flex items-center justify-center">
@@ -398,7 +475,7 @@ export default function Automates({ apiBase }) {
                 </main>
 
                 <aside className="space-y-7">
-                    <section className="neo-card p-7 bg-gradient-to-br from-turquoise/5 to-transparent">
+                    <div className="neo-card p-7 bg-gradient-to-br from-turquoise/5 to-transparent">
                         <div className="flex items-center gap-3 mb-5">
                             <GitBranch className="w-5 h-5 text-turquoise" />
                             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Contexte</h3>
@@ -413,16 +490,17 @@ export default function Automates({ apiBase }) {
                                     <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Etat actuel</p>
                                     <p className="mt-2 text-lg font-black text-white">{formatState(selectedEntity.statut)}</p>
                                 </div>
-                                <p className="text-sm leading-7 text-white/65">
-                                    Ce cycle autorise {availableTransitions.length} transition(s) depuis l'etat courant.
-                                </p>
+                                <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Transitions</p>
+                                    <p className="mt-2 text-2xl font-black text-white">{availableTransitions.length}</p>
+                                </div>
                             </div>
                         ) : (
                             <p className="text-sm text-white/60">Selectionnez une entite pour afficher son contexte.</p>
                         )}
-                    </section>
+                    </div>
 
-                    <section className="neo-card p-7 border-dashed border-white/10 bg-white/[0.01]">
+                    <div className="neo-card p-7 border-dashed border-white/10 bg-white/[0.01]">
                         <div className="flex items-center gap-3 mb-5">
                             <ShieldCheck className="w-5 h-5 text-turquoise" />
                             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Audit</h3>
@@ -447,14 +525,14 @@ export default function Automates({ apiBase }) {
                                 <p className="text-sm text-white/70 leading-7">{validation.justification}</p>
                             </motion.div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-center opacity-30">
-                                <GitBranch className="w-12 h-12 mb-4" />
+                            <div className="flex items-center gap-4 text-white/40">
+                                <GitBranch className="w-10 h-10" />
                                 <p className="text-[10px] font-black uppercase tracking-[0.2em]">Audit pret</p>
                             </div>
                         )}
-                    </section>
+                    </div>
                 </aside>
-            </div>
+            </section>
         </div>
     );
 }
