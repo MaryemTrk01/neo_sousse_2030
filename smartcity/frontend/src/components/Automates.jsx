@@ -286,46 +286,46 @@ export default function Automates({ apiBase }) {
                 </div>
             </header>
 
-            <section className="neo-card p-5 bg-black/40">
-                <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl border border-turquoise/20 bg-turquoise/10 flex items-center justify-center">
+            <section className="neo-card p-6 bg-black/40">
+                <div className="flex flex-wrap items-center justify-between gap-5 mb-6">
+                    <div className="flex flex-wrap items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl border border-turquoise/30 bg-turquoise/10 flex items-center justify-center">
                             <EntityIcon className={`w-6 h-6 ${currentDef.accent}`} />
                         </div>
                         <div>
                             <p className="text-[10px] text-text-dim font-black uppercase tracking-[0.2em]">Entites</p>
                             <h3 className="text-xl font-black text-white">{currentDef.label}</h3>
                         </div>
-                        <div className="hidden sm:grid grid-cols-2 gap-3 ml-2">
-                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                        <div className="hidden sm:grid grid-cols-3 gap-3">
+                            <div className="min-w-[112px] rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-4">
                                 <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Total</p>
                                 <p className="text-xl font-black text-white">{entities.length}</p>
                             </div>
-                            <div className="rounded-2xl border border-turquoise/20 bg-turquoise/[0.04] px-4 py-3">
+                            <div className="min-w-[112px] rounded-2xl border border-turquoise/30 bg-turquoise/[0.06] px-5 py-4">
                                 <p className="text-[10px] font-black text-turquoise uppercase tracking-widest">Selection</p>
                                 <p className="text-xl font-black text-white">#{selectedEntity?.id || '--'}</p>
                             </div>
-                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                            <div className="min-w-[112px] rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-4">
                                 <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Affiches</p>
                                 <p className="text-xl font-black text-white">{filteredEntities.length}</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-white/10 bg-bg-deep/70 p-2">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-text-dim" />
+                            <Search className="absolute left-4 top-1/2 w-4 h-4 -translate-y-1/2 text-turquoise" />
                             <input
                                 value={filterText}
                                 onChange={(event) => setFilterText(event.target.value)}
                                 placeholder="ID"
-                                className="h-12 w-28 rounded-2xl border border-white/10 bg-white/[0.04] pl-10 pr-3 text-sm font-bold text-white outline-none transition-colors placeholder:text-text-dim focus:border-turquoise/40"
+                                className="h-12 w-36 rounded-xl border border-white/10 bg-white/[0.04] pl-11 pr-3 text-sm font-bold text-white outline-none transition-colors placeholder:text-text-dim focus:border-turquoise/50 focus:bg-turquoise/[0.05]"
                             />
                         </div>
                         <select
                             value={filterState}
                             onChange={(event) => setFilterState(event.target.value)}
-                            className="h-12 min-w-[190px] rounded-2xl border border-white/10 bg-bg-deep px-4 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors focus:border-turquoise/40"
+                            className="h-12 min-w-[210px] rounded-xl border border-white/10 bg-bg-deep px-4 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors focus:border-turquoise/50"
                         >
                             <option value="ALL">Tous les etats</option>
                             {currentDef.states.map((state) => (
@@ -334,21 +334,21 @@ export default function Automates({ apiBase }) {
                         </select>
                         <button
                             onClick={() => scrollEntities(-1)}
-                            className="p-3 rounded-2xl border border-white/10 text-white hover:text-turquoise hover:bg-white/5 transition-colors"
+                            className="h-12 w-12 rounded-xl border border-white/10 bg-white/[0.04] text-white hover:text-turquoise hover:bg-turquoise/[0.06] transition-colors flex items-center justify-center"
                             title="Glisser a gauche"
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </button>
                         <button
                             onClick={() => scrollEntities(1)}
-                            className="p-3 rounded-2xl border border-white/10 text-white hover:text-turquoise hover:bg-white/5 transition-colors"
+                            className="h-12 w-12 rounded-xl border border-white/10 bg-white/[0.04] text-white hover:text-turquoise hover:bg-turquoise/[0.06] transition-colors flex items-center justify-center"
                             title="Glisser a droite"
                         >
                             <ChevronRight className="w-5 h-5" />
                         </button>
                         <button
                             onClick={() => fetchEntities(false)}
-                            className="p-3 rounded-2xl border border-white/10 text-turquoise hover:bg-white/5 transition-colors"
+                            className="h-12 w-12 rounded-xl border border-white/10 bg-white/[0.04] text-turquoise hover:bg-turquoise/[0.06] transition-colors flex items-center justify-center"
                             title="Rafraichir"
                         >
                             <RefreshCcw className="w-5 h-5" />
@@ -367,7 +367,7 @@ export default function Automates({ apiBase }) {
                             <button
                                 key={entity.id}
                                 onClick={() => setSelectedEntity(entity)}
-                                className={`min-w-[210px] p-4 rounded-2xl border text-left transition-all ${active
+                                className={`min-w-[230px] p-4 rounded-2xl border text-left transition-all ${active
                                     ? 'bg-turquoise/10 border-turquoise/40 shadow-lg shadow-turquoise/5'
                                     : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/10'
                                     }`}
