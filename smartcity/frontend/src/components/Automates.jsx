@@ -10,6 +10,7 @@ import 'reactflow/dist/style.css';
 import axios from 'axios';
 import {
     Car,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     Cpu,
@@ -322,16 +323,19 @@ export default function Automates({ apiBase }) {
                                 className="h-12 w-36 rounded-xl border border-white/10 bg-white/[0.04] pl-11 pr-3 text-sm font-bold text-white outline-none transition-colors placeholder:text-text-dim focus:border-turquoise/50 focus:bg-turquoise/[0.05]"
                             />
                         </div>
-                        <select
-                            value={filterState}
-                            onChange={(event) => setFilterState(event.target.value)}
-                            className="h-12 min-w-[210px] rounded-xl border border-white/10 bg-bg-deep px-4 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors [color-scheme:dark] focus:border-turquoise/50"
-                        >
-                            <option className="bg-bg-deep text-white" value="ALL">Tous les etats</option>
-                            {currentDef.states.map((state) => (
-                                <option className="bg-bg-deep text-white" key={state} value={state}>{formatState(state)}</option>
-                            ))}
-                        </select>
+                        <div className="relative">
+                            <select
+                                value={filterState}
+                                onChange={(event) => setFilterState(event.target.value)}
+                                className="h-12 min-w-[230px] appearance-none rounded-xl border border-white/10 bg-white/[0.04] px-4 pr-11 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors [color-scheme:dark] focus:border-turquoise/50 focus:bg-turquoise/[0.05]"
+                            >
+                                <option className="bg-bg-deep text-white" value="ALL">Tous les etats</option>
+                                {currentDef.states.map((state) => (
+                                    <option className="bg-bg-deep text-white" key={state} value={state}>{formatState(state)}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/70" />
+                        </div>
                         <button
                             onClick={() => scrollEntities(-1)}
                             className="h-12 w-12 rounded-xl border border-white/10 bg-white/[0.04] text-white hover:text-turquoise hover:bg-turquoise/[0.06] transition-colors flex items-center justify-center"
