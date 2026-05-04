@@ -8,19 +8,14 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import axios from 'axios';
-import { motion } from 'framer-motion';
 import {
-    AlertCircle,
     Car,
-    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     Cpu,
-    GitBranch,
     Play,
     RefreshCcw,
     Search,
-    ShieldCheck,
     Wrench,
 } from 'lucide-react';
 import { useSocket } from '../SocketContext';
@@ -397,7 +392,7 @@ export default function Automates({ apiBase }) {
                 </div>
             </section>
 
-            <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_390px] gap-7 items-start">
+            <section>
                 <main className="neo-card bg-black/40 overflow-hidden flex flex-col min-h-[650px]">
                     <div className="px-7 py-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
@@ -476,65 +471,6 @@ export default function Automates({ apiBase }) {
                         </div>
                     </div>
                 </main>
-
-                <aside className="space-y-7">
-                    <div className="neo-card p-7 bg-gradient-to-br from-turquoise/5 to-transparent">
-                        <div className="flex items-center gap-3 mb-5">
-                            <GitBranch className="w-5 h-5 text-turquoise" />
-                            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Contexte</h3>
-                        </div>
-                        {selectedEntity ? (
-                            <div className="space-y-4">
-                                <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Entite</p>
-                                    <p className="mt-2 text-2xl font-black text-turquoise">#{selectedEntity.id}</p>
-                                </div>
-                                <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Etat actuel</p>
-                                    <p className="mt-2 text-lg font-black text-white">{formatState(selectedEntity.statut)}</p>
-                                </div>
-                                <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Transitions</p>
-                                    <p className="mt-2 text-2xl font-black text-white">{availableTransitions.length}</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="text-sm text-white/60">Selectionnez une entite pour afficher son contexte.</p>
-                        )}
-                    </div>
-
-                    <div className="neo-card p-7 border-dashed border-white/10 bg-white/[0.01]">
-                        <div className="flex items-center gap-3 mb-5">
-                            <ShieldCheck className="w-5 h-5 text-turquoise" />
-                            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Audit</h3>
-                        </div>
-
-                        {validation ? (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className={`p-5 rounded-2xl border ${validation.valide ? 'bg-turquoise/5 border-turquoise/30' : 'bg-rose-500/5 border-rose-500/30'}`}
-                            >
-                                <div className="flex items-center gap-3 mb-4">
-                                    {validation.valide ? (
-                                        <CheckCircle2 className="w-5 h-5 text-turquoise" />
-                                    ) : (
-                                        <AlertCircle className="w-5 h-5 text-rose-400" />
-                                    )}
-                                    <span className={`text-[11px] font-black uppercase tracking-widest ${validation.valide ? 'text-turquoise' : 'text-rose-400'}`}>
-                                        {validation.valide ? 'Transition approuvee' : 'Transition refusee'}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-white/70 leading-7">{validation.justification}</p>
-                            </motion.div>
-                        ) : (
-                            <div className="flex items-center gap-4 text-white/40">
-                                <GitBranch className="w-10 h-10" />
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Audit pret</p>
-                            </div>
-                        )}
-                    </div>
-                </aside>
             </section>
         </div>
     );
