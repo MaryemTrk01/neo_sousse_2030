@@ -1,7 +1,7 @@
 import {
     LayoutDashboard, Cpu, Wrench, Wind, Terminal,
     FileText, GitBranch,
-    MessageSquare, BarChart3, Car
+    MessageSquare, Car
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -15,7 +15,6 @@ const menuItems = [
     { id: 'reports', label: 'Rapports IA', icon: FileText },
     { id: 'automates', label: 'Automates', icon: GitBranch },
     { id: 'chat', label: 'ARIA Chat', icon: MessageSquare },
-    { id: 'stats', label: 'Statistiques', icon: BarChart3 },
 ];
 
 export default function Sidebar({ activePage, setActivePage, alertsCount = 0, vehiculesPanne = 0 }) {

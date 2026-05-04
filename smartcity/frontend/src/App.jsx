@@ -8,7 +8,6 @@ import Compilateur from './components/Compilateur';
 import Rapports from './components/Rapports';
 import Automates from './components/Automates';
 import ChatIA from './components/ChatIA';
-import Statistiques from './components/Statistiques';
 import Vehicules from './components/Vehicules';
 import { AnimatePresence, motion } from 'framer-motion';
 import axios from 'axios';
@@ -175,8 +174,6 @@ function AppContent() {
                 return <Automates {...props} />;
             case 'chat':
                 return <ChatIA {...props} />;
-            case 'stats':
-                return <Statistiques {...props} />;
             default:
                 return <Accueil {...props} />;
         }
