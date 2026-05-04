@@ -132,6 +132,72 @@ def statistiques_rapides(donnees: dict) -> dict:
 # APPEL À L'API OLLAMA (Local)
 # ══════════════════════════════════════════════════════════════
 
+def rapport_professionnel_local(stats: dict, date_rapport: str) -> str:
+    """Construit un rapport professionnel sans dependance a l'IA externe."""
+    total_capteurs = stats.get('total_capteurs', 0)
+    capteurs_actifs = stats.get('capteurs_actifs', 0)
+    capteurs_hs = stats.get('capteurs_hs', 0)
+    capteurs_signales = stats.get('capteurs_signales', 0)
+    capteurs_maintenance = stats.get('capteurs_maintenance', 0)
+    total_interventions = stats.get('total_interventions', 0)
+    interventions_en_cours = stats.get('interventions_en_cours', 0)
+    interventions_terminees = stats.get('interventions_terminees', 0)
+    total_vehicules = stats.get('total_vehicules', 0)
+    vehicules_en_route = stats.get('vehicules_en_route', 0)
+    vehicules_en_panne = stats.get('vehicules_en_panne', 0)
+    total_citoyens = stats.get('total_citoyens', 0)
+    score_citoyens = stats.get('score_moyen_citoyens', 0)
+    moyenne_mesures = stats.get('moyenne_mesures', 0)
+    max_mesure = stats.get('max_mesure', 0)
+
+    disponibilite = round((capteurs_actifs / total_capteurs) * 100, 1) if total_capteurs else 0
+    taux_interventions = round((interventions_terminees / total_interventions) * 100, 1) if total_interventions else 0
+    taux_panne_flotte = round((vehicules_en_panne / total_vehicules) * 100, 1) if total_vehicules else 0
+
+    niveau_risque = "faible"
+    if capteurs_hs > 0 or vehicules_en_panne > 0 or capteurs_signales > total_capteurs * 0.25:
+        niveau_risque = "eleve"
+    elif capteurs_signales > 0 or interventions_en_cours > 0:
+        niveau_risque = "modere"
+
+    priorites = []
+    if capteurs_hs:
+        priorites.append(f"- Priorite haute : traiter {capteurs_hs} capteur(s) hors service.")
+    if vehicules_en_panne:
+        priorites.append(f"- Priorite haute : deployer une equipe pour {vehicules_en_panne} vehicule(s) en panne.")
+    if capteurs_signales:
+        priorites.append(f"- Priorite moyenne : verifier {capteurs_signales} capteur(s) signale(s).")
+    if interventions_en_cours:
+        priorites.append(f"- Priorite moyenne : suivre {interventions_en_cours} intervention(s) encore ouverte(s).")
+    if not priorites:
+        priorites.append("- Priorite basse : maintenir la surveillance et conserver le rythme de controle actuel.")
+
+    return f"""RAPPORT STRATEGIQUE IA - NEO-SOUSSE 2030
+Date : {date_rapport}
+Statut global : risque {niveau_risque.upper()}
+
+1. Resume executif
+Le reseau urbain Neo-Sousse 2030 est compose de {total_capteurs} capteurs, {total_vehicules} vehicules connectes, {total_interventions} interventions suivies et {total_citoyens} citoyens references. La disponibilite des capteurs est estimee a {disponibilite}%, avec {capteurs_actifs} capteurs actifs, {capteurs_signales} signales, {capteurs_maintenance} en maintenance et {capteurs_hs} hors service.
+
+2. Infrastructures et capteurs
+Les donnees capteurs indiquent une moyenne de mesures de {moyenne_mesures}, avec un pic observe a {max_mesure}. Les capteurs signales et hors service doivent rester le principal point de vigilance, car ils impactent directement la qualite des tableaux de bord, des alertes et des decisions operationnelles.
+
+3. Interventions techniques
+Le portefeuille d'interventions contient {interventions_terminees} mission(s) terminee(s) et {interventions_en_cours} mission(s) en cours. Le taux de cloture operationnelle est de {taux_interventions}%. Les interventions non terminees doivent etre priorisees selon leur lien avec les capteurs critiques et les zones a forte activite.
+
+4. Mobilite urbaine
+La flotte compte {vehicules_en_route} vehicule(s) en circulation et {vehicules_en_panne} vehicule(s) en panne. Le taux de panne de flotte est de {taux_panne_flotte}%. Une panne active doit declencher une action de maintenance ou de redeploiement pour eviter une baisse de couverture urbaine.
+
+5. Experience citoyenne
+Le score ecologique citoyen moyen est de {score_citoyens}/100. Cet indicateur doit etre suivi avec les mesures environnementales pour orienter les campagnes de sensibilisation et les actions de proximite.
+
+6. Recommandations prioritaires
+{chr(10).join(priorites)}
+
+7. Conclusion
+La situation reste pilotable si les alertes capteurs, les vehicules en panne et les interventions ouvertes sont traites dans le prochain cycle operationnel. Le systeme doit continuer a synchroniser les pages en temps reel et a valider les transitions d'etats par les automates."""
+
+
 def appeler_ollama(prompt: str, system: str = "") -> str:
     """
     Appelle l'API Ollama locale pour générer du texte.
@@ -251,6 +317,8 @@ Structure :
 Format : Texte pro, titres clairs, max 300 mots.
 """
         reponse = appeler_ollama(prompt)
+        if reponse is None or len(reponse.strip()) < 250:
+            return rapport_professionnel_local(stats, self.date_aujourd_hui)
         
         if reponse is None:
             return f"Rapport indisponible (Ollama déconnecté). Résumé : {stats['total_capteurs']} capteurs, {stats['capteurs_hs']} HS."
