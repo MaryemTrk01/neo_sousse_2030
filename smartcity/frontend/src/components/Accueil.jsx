@@ -1,142 +1,235 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-    Activity,
     Cpu,
     Wrench,
-    Users,
-    TrendingUp,
     Car,
     AlertTriangle,
     ArrowUpRight,
-    ShieldCheck
+    ShieldCheck,
+    BarChart3,
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-
-const data = [
-    { name: '00h', val: 40 }, { name: '04h', val: 30 }, { name: '08h', val: 70 },
-    { name: '12h', val: 85 }, { name: '16h', val: 60 }, { name: '20h', val: 45 }, { name: '23h', val: 50 },
-];
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+} from 'recharts';
+import { useSocket } from '../SocketContext';
 
 const StatCard = ({ label, value, icon: Icon, color, subValue, trend }) => (
     <motion.div
-        whileHover={{ y: -5 }}
-        className="glass-card p-6 flex flex-col gap-4 relative overflow-hidden"
+        whileHover={{ y: -5, scale: 1.02 }}
+        className="neo-card p-6 flex flex-col gap-4 relative overflow-hidden group"
     >
-        <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 opacity-10 rounded-full bg-${color}-500 blur-2xl`} />
-        <div className="flex justify-between items-start">
-            <div className={`p-3 rounded-lg bg-${color}-500/10 text-${color}-400`}>
-                <Icon className="w-6 h-6" />
+        <div className={`absolute -right-4 -top-4 w-24 h-24 bg-${color}-500/10 blur-3xl rounded-full`} />
+
+        <div className="flex justify-between items-start z-10">
+            <div className={`p-3.5 rounded-2xl bg-${color}-500/10 border border-${color}-500/20`}>
+                <Icon className={`w-6 h-6 text-${color}-400`} />
             </div>
-            {trend && (
-                <span className={`flex items-center text-[10px] font-bold ${trend > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {trend > 0 ? '+' : ''}{trend}% <ArrowUpRight className="w-3 h-3 ml-0.5" />
-                </span>
+
+            {trend !== undefined && (
+                <div className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 ${trend >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                    <ArrowUpRight className={`w-3 h-3 ${trend < 0 ? 'rotate-90' : ''}`} />
+                    {Math.abs(trend)}%
+                </div>
             )}
         </div>
-        <div>
-            <p className="text-sm text-gray-500 font-medium">{label}</p>
+
+        <div className="z-10">
+            <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-1">{label}</p>
             <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold text-white">{value ?? 0}</h3>
-                {subValue && <span className="text-xs text-gray-600">{subValue}</span>}
+                <h3 className="text-3xl font-black text-white tracking-tighter">{value ?? 0}</h3>
+                {subValue && <span className="text-xs text-gray-500 font-medium">{subValue}</span>}
             </div>
         </div>
     </motion.div>
 );
 
 export default function Accueil({ globalStats }) {
-    if (!globalStats) return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => <div key={i} className="glass-card h-32 animate-pulse bg-gray-800/20" />)}
-        </div>
-    );
+    const { connected } = useSocket();
+    const liveStats = globalStats;
+
+    if (!liveStats) {
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="neo-card h-40 animate-pulse bg-white/5" />
+                ))}
+            </div>
+        );
+    }
+
+    const chartData = liveStats.measure_chart_data || [];
+    const mesuresByType = liveStats.mesures_by_type || [];
+    const anomalies = (liveStats.capteurs_hs || 0) + (liveStats.capteurs_signales || 0);
 
     const stats = [
-        { label: 'Capteurs Actifs', value: globalStats.capteurs_actifs, subValue: `/ ${globalStats.total_capteurs || 0}`, icon: Cpu, color: 'blue', trend: 12 },
-        { label: 'Capteurs HS', value: globalStats.capteurs_hs, icon: AlertTriangle, color: 'rose', trend: -5 },
-        { label: 'Interventions', value: globalStats.interventions_en_cours, subValue: 'en cours', icon: Wrench, color: 'amber', trend: 8 },
-        { label: 'Véhicules', value: globalStats.vehicules_en_route, subValue: 'actifs', icon: Car, color: 'indigo', trend: 15 },
+        {
+            label: 'Capteurs Actifs',
+            value: liveStats.capteurs_actifs,
+            subValue: `/ ${liveStats.total_capteurs || 0}`,
+            icon: Cpu,
+            color: 'blue',
+            trend: 8,
+        },
+        {
+            label: 'Anomalies',
+            value: anomalies,
+            subValue: 'signalés + HS',
+            icon: AlertTriangle,
+            color: 'rose',
+            trend: -12,
+        },
+        {
+            label: 'Capteurs Maintenance',
+            value: liveStats.capteurs_maintenance,
+            subValue: 'capteurs',
+            icon: Wrench,
+            color: 'amber',
+            trend: 4,
+        },
+        {
+            label: 'Mobilité Live',
+            value: liveStats.vehicules_en_route,
+            subValue: 'véhicules',
+            icon: Car,
+            color: 'cyan',
+            trend: 22,
+        },
     ];
 
     return (
-        <div className="space-y-8">
-            <header className="flex justify-between items-end">
+        <div className="space-y-10 animate-fade-in">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>
-                    <h1 className="text-4xl font-extrabold text-white tracking-tight">Tableau de Bord</h1>
-                    <p className="text-gray-500 mt-2">Vue d'ensemble de la métropole • {globalStats.date || '—'}</p>
+                    <h1 className="text-5xl font-black tracking-tighter text-white mb-2">
+                        Neo-Sousse <span className="text-gradient">2030</span>
+                    </h1>
+                    <div className="flex items-center gap-3">
+                        <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold text-turquoise uppercase tracking-widest">
+                            Hyper-connectée
+                        </span>
+                        <span className="text-sm text-gray-400">
+                            Session Live • {liveStats.date}
+                        </span>
+                    </div>
                 </div>
-                <div className="flex gap-4 text-[11px] font-bold uppercase tracking-widest text-emerald-400 flex items-center bg-emerald-500/5 px-4 py-2 rounded-full border border-emerald-500/20">
-                    <Activity className="w-4 h-4 animate-pulse" />
-                    Mise à jour en direct
+
+                <div className="px-6 py-3 neo-glass rounded-2xl border border-white/5 text-[10px] font-black text-white uppercase tracking-widest">
+                    {connected ? 'Socket connecte' : 'Sync 60s'}
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((s, i) => <StatCard key={i} {...s} />)}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                {stats.map((s) => (
+                    <StatCard key={s.label} {...s} />
+                ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 glass-card p-8">
-                    <div className="flex justify-between items-center mb-8">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <div className="xl:col-span-2 neo-card p-8">
+                    <div className="flex justify-between items-start mb-8">
                         <div>
-                            <h3 className="text-lg font-bold text-white">Activité du Réseau</h3>
-                            <p className="text-xs text-gray-500">Moyenne journalière des mesures</p>
+                            <h3 className="text-2xl font-black text-white tracking-tighter">
+                                Flux Énergétique & Données
+                            </h3>
+                            <p className="text-sm text-gray-400">
+                                Activité réelle des mesures depuis la base PostgreSQL/TimescaleDB
+                            </p>
                         </div>
                     </div>
-                    <div className="h-[300px] w-full">
+
+                    <div className="h-[320px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={data}>
+                            <AreaChart data={chartData}>
                                 <defs>
                                     <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                        <stop offset="5%" stopColor="#40e0d0" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#40e0d0" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                                <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
-                                <Tooltip contentStyle={{ backgroundColor: '#181d29', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#e2e8f0' }} />
-                                <Area type="monotone" dataKey="val" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorVal)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+                                <YAxis stroke="#64748b" fontSize={11} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#0d1117',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: 12,
+                                    }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="val"
+                                    stroke="#40e0d0"
+                                    strokeWidth={3}
+                                    fill="url(#colorVal)"
+                                />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    <div className="glass-card p-6 bg-gradient-to-br from-indigo-600/20 to-purple-600/20 border-indigo-500/20">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="p-2 rounded-lg bg-indigo-500 text-white">
-                                <ShieldCheck className="w-5 h-5" />
+                <div className="space-y-8">
+                    <div className="neo-card p-8">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                                <ShieldCheck className="w-6 h-6 text-emerald-400" />
                             </div>
-                            <h4 className="font-bold text-white">Score Écologique</h4>
-                        </div>
-                        <div className="flex items-center justify-between gap-6">
-                            <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-500" style={{ width: `${globalStats.score_moyen_citoyens || 0}%` }} />
+                            <div>
+                                <h3 className="text-xl font-black text-white tracking-tighter">
+                                    Eco-Score
+                                </h3>
+                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                                    Sousse durable
+                                </p>
                             </div>
-                            <span className="text-2xl font-bold text-emerald-400">{globalStats.score_moyen_citoyens || 0}%</span>
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-3 uppercase tracking-wider">Objectif 2030 : 85%</p>
+
+                        <h4 className="text-4xl font-black text-white mb-4">0%</h4>
+                        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-turquoise rounded-full" style={{ width: '0%' }} />
+                        </div>
                     </div>
 
-                    <div className="glass-card p-6">
-                        <h4 className="font-bold text-white mb-4 flex items-center gap-2">
-                            <TrendingUp className="w-4 h-4 text-emerald-400" />
-                            Indicateurs de Santé
-                        </h4>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-gray-400">Moyenne Mesures</span>
-                                <span className="text-sm font-bold text-blue-400">{globalStats.moyenne_mesures || 0} ppm</span>
+                    <div className="neo-card p-8">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20">
+                                <BarChart3 className="w-6 h-6 text-cyan-400" />
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-gray-400">Point Culminant</span>
-                                <span className="text-sm font-bold text-rose-400">{globalStats.max_mesure || 0} ppm</span>
+                            <div>
+                                <h3 className="text-xl font-black text-white tracking-tighter">
+                                    Mesures par Type
+                                </h3>
+                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                                    Moyenne 24h
+                                </p>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-gray-400">Citoyens Engagés</span>
-                                <span className="text-sm font-bold text-indigo-400">{globalStats.total_citoyens || 0}</span>
-                            </div>
+                        </div>
+
+                        <div className="h-[220px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={mesuresByType}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                    <XAxis dataKey="type_mesure" stroke="#64748b" fontSize={10} />
+                                    <YAxis stroke="#64748b" fontSize={10} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#0d1117',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: 12,
+                                        }}
+                                    />
+                                    <Bar dataKey="moyenne" fill="#40e0d0" radius={[8, 8, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
                 </div>

@@ -31,7 +31,7 @@ from db_config import get_cursor, get_connection
 
 # ── Configuration Ollama (Local) ──
 OLLAMA_URL   = "http://localhost:11434/api/chat"
-OLLAMA_MODEL = "llama3.2"  # Comme spécifié dans ia_chat.py
+OLLAMA_MODEL = "llama3.2" 
 
 
 # ══════════════════════════════════════════════════════════════
@@ -57,8 +57,6 @@ def collecter_donnees_bd() -> dict:
                 d = dict(r)
                 if d.get('date'):
                     d['date'] = str(d['date'])
-                if d.get('date_installation'):
-                    d['date_installation'] = str(d['date_installation'])
                 interventions.append(d)
             donnees['interventions'] = interventions
 
@@ -109,7 +107,7 @@ def statistiques_rapides(donnees: dict) -> dict:
 
     # Mesures
     mesures = donnees.get('mesures', [])
-    valeurs = [m['valeur'] for m in mesures if m.get('valeur') is not None]
+    valeurs = [float(m['valeur']) for m in mesures if m.get('valeur') is not None]
     stats['moyenne_mesures'] = round(sum(valeurs) / len(valeurs), 2) if valeurs else 0
     stats['max_mesure'] = round(max(valeurs), 2) if valeurs else 0
     stats['min_mesure'] = round(min(valeurs), 2) if valeurs else 0
@@ -151,23 +149,21 @@ def appeler_ollama(prompt: str, system: str = "") -> str:
             {"role": "user", "content": prompt}
         ],
         "stream": False,
-        "options": {"temperature": 0.7}
+        "options": {"temperature": 0.4}
     }
 
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        OLLAMA_URL, data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            OLLAMA_URL, data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result['message']['content'].strip()
-    except urllib.error.URLError as e:
-        return None  # Retourne None si Ollama est indisponible
     except Exception as e:
+        print(f"[ERROR] Erreur Ollama: {e}")
         return None
 
 
@@ -178,7 +174,6 @@ def appeler_ollama_chat(historique: list, contexte_bd: str) -> str:
     system_prompt = f"""Tu es ARIA, l'IA officielle de la ville intelligente Neo-Sousse 2030.
 Tu réponds en français à toutes les questions des gestionnaires urbains.
 Tu analyses les données de la ville, génères des rapports, suggères des actions.
-Tu réponds aussi aux questions générales. Sois précis et professionnel.
 Voici les données actuelles de la ville :
 {contexte_bd}"""
 
@@ -193,21 +188,18 @@ Voici les données actuelles de la ville :
         "options": {"temperature": 0.7}
     }
 
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        OLLAMA_URL, data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            OLLAMA_URL, data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result['message']['content'].strip()
-    except urllib.error.URLError as e:
-        return f"Ollama non disponible. Detail : {e}"
     except Exception as e:
-        return f"[Erreur Ollama] {e}"
+        return f"Désolé, je rencontre des difficultés techniques (Ollama non disponible). Erreur: {e}"
 
 
 # ══════════════════════════════════════════════════════════════
@@ -235,234 +227,118 @@ CAPTEURS: {stats['total_capteurs']} total | {stats['capteurs_actifs']} actifs | 
 INTERVENTIONS: {stats['total_interventions']} total | {stats['interventions_en_cours']} en cours
 VÉHICULES: {stats['total_vehicules']} total | {stats['vehicules_en_route']} en route | {stats['vehicules_en_panne']} en panne
 CITOYENS: {stats['total_citoyens']} | Score moyen: {stats['score_moyen_citoyens']}/100
-MESURES: Moyenne={stats['moyenne_mesures']} | Max={stats['max_mesure']} | Min={stats['min_mesure']}
-DONNÉES COMPLÈTES:
-{json.dumps(donnees, ensure_ascii=False, default=str, indent=2)[:3000]}
 """
 
     def rapport_journalier(self) -> str:
-        """Génère un rapport journalier complet de la ville via Gemini."""
+        """Génère un rapport journalier complet de la ville via Ollama."""
         donnees = collecter_donnees_bd()
         stats = statistiques_rapides(donnees)
 
         prompt = f"""
 Génère un rapport journalier professionnel de la ville intelligente Neo-Sousse 2030 pour le {self.date_aujourd_hui}.
-
 Données du jour :
-- Capteurs : {stats['total_capteurs']} total
-  * Actifs : {stats['capteurs_actifs']}
-  * Hors service : {stats['capteurs_hs']} — zones : {[c['zone'] for c in stats['capteurs_hs_details']]}
-  * Signalés : {stats['capteurs_signales']}
-  * En maintenance : {stats['capteurs_maintenance']}
+- Capteurs : {stats['total_capteurs']} total ({stats['capteurs_actifs']} actifs, {stats['capteurs_hs']} HS)
+- Interventions : {stats['total_interventions']} total ({stats['interventions_en_cours']} en cours)
+- Véhicules : {stats['total_vehicules']} total ({stats['vehicules_en_route']} en route)
+- Citoyens : {stats['total_citoyens']} (Score écolo moyen: {stats['score_moyen_citoyens']}/100)
+- Mesures : Moyenne {stats['moyenne_mesures']}, Max {stats['max_mesure']}
 
-- Interventions : {stats['total_interventions']} total
-  * En cours : {stats['interventions_en_cours']}
-  * Terminées : {stats['interventions_terminees']}
-
-- Mesures récentes :
-  * Moyenne : {stats['moyenne_mesures']}
-  * Maximum : {stats['max_mesure']}
-  * Minimum : {stats['min_mesure']}
-
-- Véhicules :
-  * En route : {stats['vehicules_en_route']}
-  * En panne : {stats['vehicules_en_panne']}
-
-- Citoyens : {stats['total_citoyens']} | Score écologique moyen = {stats['score_moyen_citoyens']}/100
-
-Le rapport doit contenir :
-1. Un résumé exécutif
-2. Les points critiques et alertes
-3. Les indicateurs positifs
-4. Recommandations de conclusion
-
-Format : texte professionnel, structuré avec des titres, 250 mots maximum.
+Structure :
+1. Résumé exécutif
+2. Analyse des infrastructures (Capteurs/Véhicules)
+3. Gestion des interventions
+4. Perspectives et recommandations
+Format : Texte pro, titres clairs, max 300 mots.
 """
         reponse = appeler_ollama(prompt)
         
         if reponse is None:
-            # Fallback local si Ollama est indisponible
-            return f"""
-╔══════════════════════════════════════════════════════╗
-  RAPPORT JOURNALIER — Neo-Sousse 2030 — {self.date_aujourd_hui}
-╚══════════════════════════════════════════════════════╝
-
-1. RÉSUMÉ EXÉCUTIF
-Le réseau de la ville intelligente est actuellement opérationnel.
-Nous comptons {stats['total_capteurs']} capteurs, dont {stats['capteurs_actifs']} actifs et {stats['capteurs_hs']} hors service.
-Le score écologique moyen des citoyens est de {stats['score_moyen_citoyens']}/100.
-
-2. POINTS CRITIQUES ET ALERTES
-{chr(10).join(f'  ⚠️ Capteur {c["id"]} (Zone {c["zone"]}) - HORS SERVICE' for c in stats['capteurs_hs_details']) if stats['capteurs_hs'] > 0 else '  ✅ Aucun incident critique sur les capteurs.'}
-  ⚠️ Véhicules en panne : {stats['vehicules_en_panne']}
-
-3. INDICATEURS POSITIFS
-  • Interventions terminées : {stats['interventions_terminees']}
-  • Moyenne des mesures récentes : {stats['moyenne_mesures']}
-  • Véhicules en route : {stats['vehicules_en_route']}
-
-4. RECOMMANDATIONS
-  • Prioriser la réparation des capteurs hors service.
-  • Assigner des techniciens aux {stats['interventions_en_cours']} interventions en cours.
-  • Maintenir la surveillance de la qualité de l'air.
-
-(Note: Ce rapport est généré localement car le serveur d'IA Ollama n'est pas joignable.)
-"""
+            return f"Rapport indisponible (Ollama déconnecté). Résumé : {stats['total_capteurs']} capteurs, {stats['capteurs_hs']} HS."
         return reponse
 
     def suggestions_actions(self) -> list:
-        """
-        Génère des suggestions d'actions prioritaires.
-        Retourne une liste de dicts : {priorite, message, type}
-        """
+        """Génère des suggestions d'actions prioritaires."""
         donnees = collecter_donnees_bd()
         stats = statistiques_rapides(donnees)
-
         suggestions = []
 
-        # Suggestions basées sur les données réelles
-        for c in stats['capteurs_hs_details']:
-            suggestions.append({
-                "priorite": "haute",
-                "type": "capteur",
-                "message": f"🔧 Intervention urgente recommandée sur capteur ID={c['id']} "
-                           f"(zone {c['zone']}) : hors service, maintenance ou remplacement requis."
-            })
-
-        for v in stats['vehicules_panne_details']:
-            suggestions.append({
-                "priorite": "haute",
-                "type": "vehicule",
-                "message": f"🚗 Dépannage requis pour véhicule ID={v['id']} "
-                           f"(type: {v['type']}) : en panne, bloquer les nouvelles assignations."
-            })
-
-        if stats['interventions_en_cours'] > 3:
-            suggestions.append({
-                "priorite": "moyenne",
-                "type": "intervention",
-                "message": f"📋 {stats['interventions_en_cours']} interventions en cours — "
-                           f"vérifier la charge des techniciens et réaffecter si nécessaire."
-            })
-
-        if stats['score_moyen_citoyens'] < 50:
-            suggestions.append({
-                "priorite": "moyenne",
-                "type": "citoyen",
-                "message": f"🌱 Score écologique moyen bas ({stats['score_moyen_citoyens']}/100) — "
-                           f"lancer une campagne de sensibilisation environnementale."
-            })
-
-        if stats['moyenne_mesures'] > 80:
-            suggestions.append({
-                "priorite": "haute",
-                "type": "mesure",
-                "message": f"⚠️ Moyenne des mesures élevée ({stats['moyenne_mesures']}) — "
-                           f"dépassement de seuil potentiel, vérifier la qualité de l'air."
-            })
-
+        if stats['capteurs_hs'] > 0:
+            suggestions.append({"priorite": "haute", "type": "capteur", "message": f"Réparer les {stats['capteurs_hs']} capteurs HORS SERVICE immédiatement."})
+        if stats['vehicules_en_panne'] > 0:
+            suggestions.append({"priorite": "haute", "type": "vehicule", "message": f"Dépêcher une équipe pour les {stats['vehicules_en_panne']} véhicules en panne."})
+        if stats['score_moyen_citoyens'] < 60:
+            suggestions.append({"priorite": "moyenne", "type": "citoyen", "message": "Lancer une campagne de sensibilisation au tri sélectif."})
+        
         if not suggestions:
-            suggestions.append({
-                "priorite": "basse",
-                "type": "info",
-                "message": "✅ Tous les systèmes fonctionnent normalement. Aucune action requise."
-            })
-
+            suggestions.append({"priorite": "basse", "type": "info", "message": "Systèmes nominaux. Aucune action critique requise."})
         return suggestions
 
-    def valider_transition_automate(self, entite: str, etat_actuel: str,
-                                     evenement: str, etat_suivant: str) -> dict:
+    def compile_nl_to_sql(self, nl_query: str) -> dict:
         """
-        Valide une transition d'automate via l'IA Gemini.
-        Retourne un dict : {valide, justification, entite, transition}
+        Convertit le langage naturel en SQL SELECT sécurisé via Ollama.
         """
-        # Définir les transitions valides par entité
-        transitions_valides = {
-            "capteur": {
-                ("INACTIF", "activer", "ACTIF"),
-                ("ACTIF", "signaler", "SIGNALE"),
-                ("SIGNALE", "maintenir", "EN_MAINTENANCE"),
-                ("EN_MAINTENANCE", "declarer_hs", "HORS_SERVICE"),
-            },
-            "intervention": {
-                ("DEMANDE", "assigner_tech1", "TECH1_ASSIGNE"),
-                ("TECH1_ASSIGNE", "valider_tech2", "TECH2_VALIDE"),
-                ("TECH2_VALIDE", "valider_ia", "IA_VALIDE"),
-                ("IA_VALIDE", "terminer", "TERMINE"),
-            },
-            "vehicule": {
-                ("STATIONNE", "demarrer", "EN_ROUTE"),
-                ("EN_ROUTE", "panne", "EN_PANNE"),
-                ("EN_ROUTE", "arriver", "ARRIVE"),
-                ("EN_PANNE", "arriver", "ARRIVE"),
-            },
-        }
+        system_prompt = """Tu es un compilateur SQL expert pour Neo-Sousse. 
+Tu génères UNIQUEMENT des requêtes SELECT pour PostgreSQL.
+SCHEMA:
+- capteurs(id, type, zone, statut, date_installation)
+- interventions(id, capteur_id, technicien1_id, technicien2_id, statut, date)
+- mesures(id, capteur_id, type_mesure, valeur, date)
+- vehicules(id, type, trajet_id, statut)
+- citoyens(id, nom, score_ecolo, adresse)
 
-        # Vérification locale d'abord
-        entite_lower = entite.lower()
-        transition = (etat_actuel, evenement, etat_suivant)
-        est_valide_localement = transition in transitions_valides.get(entite_lower, set())
+REGLES STRICTES:
+1. Uniquement des requêtes SELECT.
+2. Interdiction absolue: INSERT, UPDATE, DELETE, DROP, TRUNCATE, ALTER.
+3. Réponds UNIQUEMENT avec le code SQL brut, sans markdown, sans texte autour.
+4. Si la requête demande une modification, réponds 'BLOCKED'."""
 
-        # Enrichissement par Gemini
-        prompt = f"""
-Dans le système Smart City Neo-Sousse 2030, évalue cette transition d'automate :
+        sql_gen = appeler_ollama(nl_query, system=system_prompt)
+        
+        if not sql_gen:
+            return {"success": False, "error": "Ollama indisponible"}
 
-Entité      : {entite}
-État actuel  : {etat_actuel}
-Événement    : {evenement}
-État suivant : {etat_suivant}
+        sql_clean = sql_gen.strip().replace('```sql', '').replace('```', '').strip()
+        
+        # Sécurité supplémentaire
+        forbidden = ['DELETE', 'UPDATE', 'DROP', 'INSERT', 'ALTER', 'TRUNCATE', ';']
+        if any(word in sql_clean.upper() for word in forbidden) or not sql_clean.upper().startswith('SELECT'):
+            return {"success": False, "error": "Requête non autorisée ou invalide", "sql": sql_clean}
 
-Transitions valides pour {entite} : {transitions_valides.get(entite_lower, 'inconnues')}
-Résultat vérification locale : {'VALIDE' if est_valide_localement else 'INVALIDE'}
-
-Réponds en JSON strict : {{"valide": true/false, "justification": "explication en 1-2 phrases"}}
-"""
-        reponse = appeler_ollama(prompt)
-
-        # Parser la réponse
         try:
-            # Extraire le JSON de la réponse
-            import re
-            match = re.search(r'\{.*\}', reponse, re.DOTALL)
-            if match:
-                result = json.loads(match.group())
-            else:
-                result = {"valide": est_valide_localement, "justification": reponse}
-        except (json.JSONDecodeError, Exception):
-            result = {"valide": est_valide_localement, "justification": reponse}
-
-        result['entite'] = entite
-        result['transition'] = f"{etat_actuel} --[{evenement}]--> {etat_suivant}"
-        return result
+            with get_cursor() as cur:
+                cur.execute(sql_clean)
+                rows = cur.fetchall()
+                explanation_prompt = f"Explique brièvement en français ce que fait cette requête SQL : {sql_clean}"
+                explanation = appeler_ollama(explanation_prompt)
+                return {
+                    "success": True,
+                    "sql": sql_clean,
+                    "rows": [dict(r) for r in rows],
+                    "explanation": explanation
+                }
+        except Exception as e:
+            return {"success": False, "error": str(e), "sql": sql_clean}
 
     def chat(self, question: str) -> str:
-        """
-        Chat interactif avec ARIA.
-        Maintient l'historique de conversation.
-        """
-        # Rafraîchir le contexte toutes les 5 questions
-        if len(self.historique_chat) % 10 == 0:
+        """Chat interactif avec ARIA."""
+        if len(self.historique_chat) % 5 == 0:
             self._rafraichir_contexte()
 
         self.historique_chat.append({"role": "user", "content": question})
         reponse = appeler_ollama_chat(self.historique_chat, self.contexte_bd)
         self.historique_chat.append({"role": "assistant", "content": reponse})
 
-        # Limiter l'historique à 20 messages
-        if len(self.historique_chat) > 20:
-            self.historique_chat = self.historique_chat[-20:]
-
+        if len(self.historique_chat) > 10:
+            self.historique_chat = self.historique_chat[-10:]
         return reponse
 
     def get_stats(self) -> dict:
-        """Retourne les KPIs sous forme de dictionnaire JSON-sérialisable."""
+        """Retourne les KPIs."""
         donnees = collecter_donnees_bd()
         stats = statistiques_rapides(donnees)
         stats['date'] = self.date_aujourd_hui
-        # Retirer les détails non sérialisables
-        stats.pop('capteurs_hs_details', None)
-        stats.pop('vehicules_panne_details', None)
         return stats
+
 
     def get_donnees_completes(self) -> dict:
         """Retourne toutes les données brutes de la BD."""
@@ -490,7 +366,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     if not test_connection():
-        print("❌ PostgreSQL non disponible.")
+        print("[ERROR] PostgreSQL non disponible.")
         sys.exit(1)
 
     ia = IAGenerative()

@@ -23,9 +23,9 @@ OLLAMA_MODEL = "mistral"
 DB_CONFIG = {
     "dbname":   "smartcity",
     "user":     "postgres",
-    "password": "salma",
+    "password": "14614114",
     "host":     "localhost",
-    "port":     "5434"
+    "port":     "5433"
 }
 
 

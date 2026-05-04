@@ -23,38 +23,30 @@ ZONES.forEach(z => {
 
 // Couleur selon niveau de pollution
 const pollutionColor = (val) => {
-    if (!val || val < 45) return { fill: 'rgba(34,197,94,0.18)', stroke: 'rgba(34,197,94,0.5)' };
-    if (val < 70) return { fill: 'rgba(245,158,11,0.18)', stroke: 'rgba(245,158,11,0.5)' };
-    return { fill: 'rgba(239,68,68,0.22)', stroke: 'rgba(239,68,68,0.6)' };
+    if (!val || val < 45) return { fill: 'rgba(64,224,208,0.1)', stroke: 'rgba(64,224,208,0.3)' };
+    if (val < 70) return { fill: 'rgba(252,211,77,0.1)', stroke: 'rgba(252,211,77,0.3)' };
+    return { fill: 'rgba(244,63,94,0.1)', stroke: 'rgba(244,63,94,0.3)' };
 };
 
-// Couleur selon statut capteur
 const capteurColor = (statut) => {
     const map = {
-        ACTIF: '#10b981',
-        HORS_SERVICE: '#ef4444',
-        SIGNALE: '#f59e0b',
-        EN_MAINTENANCE: '#3b82f6',
-        INACTIF: '#6b7280',
-    };
-    return map[statut] || '#6b7280';
-};
-
-// Couleur selon statut véhicule
-const vehiculeColor = (statut) => {
-    const map = {
-        EN_ROUTE: '#10b981',
-        EN_PANNE: '#ef4444',
-        STATIONNE: '#6b7280',
-        ARRIVE: '#3b82f6',
+        ACTIF: '#40e0d0', // Turquoise
+        HORS_SERVICE: '#f43f5e', // Rose
+        SIGNALE: '#fcd34d', // Sand
+        EN_MAINTENANCE: '#f59e0b',
+        INACTIF: '#94a3b8',
     };
     return map[statut] || '#94a3b8';
 };
 
-// Icône véhicule selon type
-const vehiculeIcon = (type) => {
-    const map = { bus: '🚌', voiture: '🚗', camion: '🚛', moto: '🛵', scooter: '🛴' };
-    return map[type] || '🚗';
+const vehiculeColor = (statut) => {
+    const map = {
+        EN_ROUTE: '#3b82f6',
+        EN_PANNE: '#f43f5e',
+        STATIONNE: '#94a3b8',
+        ARRIVE: '#10b981',
+    };
+    return map[statut] || '#94a3b8';
 };
 
 export default function CarteUrbaine({ apiBase }) {
@@ -67,11 +59,8 @@ export default function CarteUrbaine({ apiBase }) {
     const [lastUpdate, setLastUpdate] = useState(null);
     const [animTick, setAnimTick] = useState(0);
     const intervalRef = useRef(null);
-
-    // Positions animées des véhicules (simulation mouvement)
     const [vehiculePos, setVehiculePos] = useState({});
 
-    // ── Fetch données ──
     const fetchAll = useCallback(async () => {
         try {
             const [capRes, vehRes, mesRes] = await Promise.all([
@@ -79,53 +68,33 @@ export default function CarteUrbaine({ apiBase }) {
                 axios.get(`${apiBase}/vehicules`),
                 axios.get(`${apiBase}/mesures`),
             ]);
-
             const caps = capRes.data.capteurs || [];
             const vehs = vehRes.data.vehicules || [];
             const mes = mesRes.data.mesures || [];
-
             setCapteurs(caps);
             setVehicules(vehs);
-
-            // Calculer moyenne pollution par zone
             const stats = {};
             ZONES.forEach(z => {
-                const zm = mes.filter(m => m.zone === z.id || m.zone === z.name);
-                const pol = zm.filter(m => m.type_mesure === 'pollution');
-                stats[z.id] = pol.length > 0
-                    ? Math.round(pol.reduce((s, m) => s + parseFloat(m.valeur), 0) / pol.length)
-                    : Math.floor(Math.random() * 60) + 10;
+                const pol = mes.filter(m => (m.zone === z.id || m.zone === z.name) && m.type_mesure === 'pollution');
+                stats[z.id] = pol.length > 0 ? Math.round(pol.reduce((s, m) => s + parseFloat(m.valeur), 0) / pol.length) : Math.floor(Math.random() * 40) + 10;
             });
             setZoneStats(stats);
             setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
-
-            // Initialiser positions véhicules
             setVehiculePos(prev => {
                 const next = { ...prev };
                 vehs.forEach(v => {
                     if (!next[v.id]) {
-                        // Position aléatoire dans une zone
                         const zones = Object.keys(ZONE_CENTER);
                         const z = ZONE_CENTER[zones[v.id % zones.length]];
-                        next[v.id] = {
-                            x: z.x + (Math.random() - 0.5) * 10,
-                            y: z.y + (Math.random() - 0.5) * 10,
-                            targetX: z.x,
-                            targetY: z.y,
-                        };
+                        next[v.id] = { x: z.x + (Math.random() - 0.5) * 10, y: z.y + (Math.random() - 0.5) * 10, targetX: z.x, targetY: z.y };
                     }
                 });
                 return next;
             });
-
-        } catch (err) {
-            console.error('CarteUrbaine fetch error:', err);
-        } finally {
-            setLoading(false);
-        }
+        } catch (err) { console.error(err); }
+        finally { setLoading(false); }
     }, [apiBase]);
 
-    // ── Animation mouvement véhicules ──
     const animateVehicules = useCallback(() => {
         setVehiculePos(prev => {
             const next = { ...prev };
@@ -133,29 +102,15 @@ export default function CarteUrbaine({ apiBase }) {
                 if (v.statut !== 'EN_ROUTE') return;
                 const pos = next[v.id];
                 if (!pos) return;
-
-                // Mouvement fluide vers la cible
-                const dx = pos.targetX - pos.x;
-                const dy = pos.targetY - pos.y;
+                const dx = pos.targetX - pos.x, dy = pos.targetY - pos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist < 0.5) {
-                    // Choisir une nouvelle cible aléatoire
+                if (dist < 1) {
                     const zones = Object.keys(ZONE_CENTER);
                     const z = ZONE_CENTER[zones[Math.floor(Math.random() * zones.length)]];
-                    next[v.id] = {
-                        ...pos,
-                        targetX: z.x + (Math.random() - 0.5) * 8,
-                        targetY: z.y + (Math.random() - 0.5) * 8,
-                    };
+                    next[v.id] = { ...pos, targetX: z.x + (Math.random() - 0.5) * 12, targetY: z.y + (Math.random() - 0.5) * 12 };
                 } else {
-                    // Avancer vers la cible
-                    const speed = 0.3;
-                    next[v.id] = {
-                        ...pos,
-                        x: pos.x + (dx / dist) * speed,
-                        y: pos.y + (dy / dist) * speed,
-                    };
+                    const speed = 0.2;
+                    next[v.id] = { ...pos, x: pos.x + (dx / dist) * speed, y: pos.y + (dy / dist) * speed };
                 }
             });
             return next;
@@ -164,342 +119,121 @@ export default function CarteUrbaine({ apiBase }) {
     }, [vehicules]);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
-
-    // Polling toutes les 5 secondes
     useEffect(() => {
-        intervalRef.current = setInterval(fetchAll, 5000);
+        intervalRef.current = setInterval(fetchAll, 60000);
         return () => clearInterval(intervalRef.current);
     }, [fetchAll]);
-
-    // Animation véhicules toutes les 100ms
     useEffect(() => {
         const anim = setInterval(animateVehicules, 100);
         return () => clearInterval(anim);
     }, [animateVehicules]);
 
-    // ── Statistiques globales ──
-    const nbHS = capteurs.filter(c => c.statut === 'HORS_SERVICE').length;
-    const nbActifs = capteurs.filter(c => c.statut === 'ACTIF').length;
-    const nbRoute = vehicules.filter(v => v.statut === 'EN_ROUTE').length;
-    const nbPanne = vehicules.filter(v => v.statut === 'EN_PANNE').length;
-
     return (
-        <div className="space-y-6">
-            {/* ── Header ── */}
-            <div className="flex justify-between items-start">
+        <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+            <header className="flex justify-between items-end">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-white flex items-center gap-3">
-                        <MapIcon className="text-indigo-400 w-8 h-8" />
-                        Carte Temps Réel — Neo-Sousse 2030
+                    <h2 className="text-4xl font-black text-white tracking-tighter">
+                        Carte <span className="text-gradient">Topographique</span>
                     </h2>
-                    <p className="text-gray-500 mt-1 text-sm">
-                        Véhicules, capteurs et qualité de l'air en direct
-                        {lastUpdate && <span className="ml-3 text-indigo-400">• Mis à jour {lastUpdate}</span>}
+                    <p className="text-text-muted font-medium mt-1 flex items-center gap-3">
+                        <Activity className="w-4 h-4 text-turquoise" /> Géolocalisation active Neo-Sousse 2030
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-                        <Wifi className="w-3 h-3 animate-pulse" /> Temps réel actif
+                <div className="flex items-center gap-4">
+                    <div className="neo-glass px-5 py-2 rounded-2xl border border-turquoise/20 flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-turquoise animate-pulse" />
+                        <span className="text-[10px] font-black text-turquoise uppercase tracking-widest">Temps Réel Actif</span>
                     </div>
-                    <button onClick={fetchAll}
-                        className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
-                        <RefreshCw className={`w-5 h-5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+                    <button onClick={fetchAll} className="p-3 neo-glass rounded-2xl border border-white/5 text-turquoise hover:text-white transition-all"><RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
                 </div>
-            </div>
+            </header>
 
-            {/* ── KPIs ── */}
-            <div className="grid grid-cols-4 gap-4">
-                {[
-                    { label: 'Capteurs actifs', value: nbActifs, color: 'emerald', icon: '📡' },
-                    { label: 'Hors service', value: nbHS, color: 'red', icon: '🚨' },
-                    { label: 'Véhicules en route', value: nbRoute, color: 'blue', icon: '🚗' },
-                    { label: 'En panne', value: nbPanne, color: 'amber', icon: '⚠️' },
-                ].map(kpi => (
-                    <div key={kpi.label}
-                        className={`bg-gray-900/60 border border-${kpi.color}-500/20 rounded-xl p-4 flex items-center gap-3`}>
-                        <span className="text-2xl">{kpi.icon}</span>
-                        <div>
-                            <div className={`text-2xl font-bold text-${kpi.color}-400`}>{kpi.value}</div>
-                            <div className="text-xs text-gray-500">{kpi.label}</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* ── Carte + Panel ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Carte SVG */}
-                <div className="lg:col-span-2 bg-gray-900/60 border border-gray-700/40 rounded-2xl p-6 relative overflow-hidden">
-                    <div className="absolute top-4 left-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                        Vue topographique interactive
-                    </div>
-
-                    <svg viewBox="0 0 100 100" className="w-full h-auto mt-4"
-                        style={{ maxHeight: '500px' }}>
-
-                        {/* Zones colorées selon pollution */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                <div className="lg:col-span-3 neo-card p-10 bg-black/40 relative overflow-hidden">
+                    <div className="absolute top-8 left-8 text-[10px] font-black text-text-dim uppercase tracking-[0.3em]">Synoptique Urbain</div>
+                    <svg viewBox="0 0 100 100" className="w-full h-auto mt-8 drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]" style={{ maxHeight: '600px' }}>
                         {ZONES.map(zone => {
                             const pol = zoneStats[zone.id] || 0;
                             const { fill, stroke } = pollutionColor(pol);
                             const isHovered = hoveredZone?.id === zone.id;
                             return (
                                 <g key={zone.id}>
-                                    <rect
-                                        x={zone.x} y={zone.y} width={zone.w} height={zone.h}
-                                        fill={fill}
-                                        stroke={isHovered ? 'white' : stroke}
-                                        strokeWidth={isHovered ? 0.8 : 0.3}
-                                        rx={1}
-                                        className="cursor-pointer transition-all duration-300"
-                                        onMouseEnter={() => setHoveredZone({ ...zone, pollution: pol })}
-                                        onMouseLeave={() => setHoveredZone(null)}
-                                        onClick={() => setSelected({ type: 'zone', data: { ...zone, pollution: pol } })}
-                                    />
-                                    {/* Label zone */}
-                                    <text
-                                        x={zone.x + zone.w / 2} y={zone.y + zone.h / 2}
-                                        textAnchor="middle" dominantBaseline="middle"
-                                        fontSize="3" fill="rgba(255,255,255,0.5)"
-                                        className="pointer-events-none select-none">
-                                        {zone.name}
-                                    </text>
-                                    {/* Valeur pollution */}
-                                    <text
-                                        x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 + 4}
-                                        textAnchor="middle" dominantBaseline="middle"
-                                        fontSize="2.5"
-                                        fill={pol > 70 ? '#ef4444' : pol > 45 ? '#f59e0b' : '#10b981'}
-                                        className="pointer-events-none select-none font-bold">
-                                        {pol} ppm
-                                    </text>
+                                    <motion.rect x={zone.x} y={zone.y} width={zone.w} height={zone.h} fill={fill} stroke={isHovered ? '#40e0d0' : stroke} strokeWidth={isHovered ? 0.8 : 0.2} rx={2} className="cursor-pointer transition-all duration-500" onMouseEnter={() => setHoveredZone({ ...zone, pollution: pol })} onMouseLeave={() => setHoveredZone(null)} onClick={() => setSelected({ type: 'zone', data: { ...zone, pollution: pol } })} />
+                                    <text x={zone.x + zone.w / 2} y={zone.y + zone.h / 2} textAnchor="middle" dominantBaseline="middle" fontSize="2.5" fill="rgba(255,255,255,0.2)" className="pointer-events-none select-none font-black uppercase tracking-widest">{zone.name}</text>
+                                    <text x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 + 4} textAnchor="middle" dominantBaseline="middle" fontSize="2" fill={pol > 70 ? '#f43f5e' : pol > 45 ? '#fcd34d' : '#40e0d0'} className="pointer-events-none select-none font-bold opacity-60">{pol} ppm</text>
                                 </g>
                             );
                         })}
-
-                        {/* Capteurs */}
                         {capteurs.map(cap => {
                             const zone = ZONE_CENTER[cap.zone] || ZONE_CENTER['centre'];
                             const col = capteurColor(cap.statut);
-                            // Offset pour éviter superposition
-                            const ox = ((cap.id * 3.7) % 8) - 4;
-                            const oy = ((cap.id * 2.3) % 8) - 4;
-                            const cx = (zone?.x || 50) + ox;
-                            const cy = (zone?.y || 50) + oy;
-
+                            const ox = ((cap.id * 5) % 10) - 5, oy = ((cap.id * 3) % 10) - 5;
+                            const cx = (zone?.x || 50) + ox, cy = (zone?.y || 50) + oy;
                             return (
-                                <g key={`cap-${cap.id}`}
-                                    className="cursor-pointer"
-                                    onClick={() => setSelected({ type: 'capteur', data: cap })}>
-                                    {/* Pulse pour HS */}
-                                    {cap.statut === 'HORS_SERVICE' && (
-                                        <circle cx={cx} cy={cy} r={3}
-                                            fill="none" stroke="#ef4444" strokeWidth={0.3}
-                                            opacity={0.5 + 0.5 * Math.sin(animTick * 0.2)}>
-                                        </circle>
-                                    )}
-                                    <circle cx={cx} cy={cy} r={1.5}
-                                        fill={col} stroke="white" strokeWidth={0.3} />
-                                    <text x={cx} y={cy - 2.5}
-                                        textAnchor="middle" fontSize="1.8"
-                                        fill="white" className="pointer-events-none select-none">
-                                        📡
-                                    </text>
+                                <g key={`cap-${cap.id}`} className="cursor-pointer group" onClick={() => setSelected({ type: 'capteur', data: cap })}>
+                                    {cap.statut === 'HORS_SERVICE' && <circle cx={cx} cy={cy} r={4} fill="none" stroke="#f43f5e" strokeWidth={0.2} opacity={0.4} className="animate-ping" />}
+                                    <circle cx={cx} cy={cy} r={1.2} fill={col} stroke="rgba(255,255,255,0.2)" strokeWidth={0.2} className="transition-all group-hover:scale-150" />
+                                    <text x={cx} y={cy - 2} textAnchor="middle" fontSize="1.5" fill="white" className="pointer-events-none select-none opacity-40 group-hover:opacity-100 transition-opacity">📡</text>
                                 </g>
                             );
                         })}
-
-                        {/* Véhicules animés */}
                         {vehicules.map(v => {
-                            const pos = vehiculePos[v.id];
-                            if (!pos) return null;
+                            const pos = vehiculePos[v.id]; if (!pos) return null;
                             const col = vehiculeColor(v.statut);
-
                             return (
-                                <g key={`veh-${v.id}`}
-                                    className="cursor-pointer"
-                                    onClick={() => setSelected({ type: 'vehicule', data: v })}>
-                                    {/* Traînée pour véhicules en route */}
-                                    {v.statut === 'EN_ROUTE' && (
-                                        <circle cx={pos.x} cy={pos.y} r={2.5}
-                                            fill={col} opacity={0.15} />
-                                    )}
-                                    <circle cx={pos.x} cy={pos.y} r={1.8}
-                                        fill={col} stroke="white" strokeWidth={0.3} />
-                                    <text x={pos.x} y={pos.y + 0.7}
-                                        textAnchor="middle" fontSize="2"
-                                        className="pointer-events-none select-none">
-                                        {v.statut === 'EN_ROUTE' ? '🚗' :
-                                            v.statut === 'EN_PANNE' ? '🔧' :
-                                                v.statut === 'ARRIVE' ? '🏁' : '🅿️'}
-                                    </text>
-                                </g>
+                                <motion.g key={`veh-${v.id}`} className="cursor-pointer group" onClick={() => setSelected({ type: 'vehicule', data: v })}>
+                                    {v.statut === 'EN_ROUTE' && <circle cx={pos.x} cy={pos.y} r={2} fill={col} opacity={0.1} />}
+                                    <circle cx={pos.x} cy={pos.y} r={1.4} fill={col} stroke="white" strokeWidth={0.2} className="transition-transform group-hover:scale-125" />
+                                </motion.g>
                             );
                         })}
                     </svg>
-
-                    {/* Légende */}
-                    <div className="flex flex-wrap gap-4 mt-4 text-xs text-gray-400">
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-full bg-emerald-500" /> Normal (&lt;45 ppm)
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-full bg-amber-500" /> Vigilance (45-70)
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-full bg-red-500" /> Critique (&gt;70)
-                        </div>
-                        <div className="flex items-center gap-1.5">📡 Capteur</div>
-                        <div className="flex items-center gap-1.5">🚗 Véhicule en route</div>
-                        <div className="flex items-center gap-1.5">🔧 En panne</div>
+                    <div className="flex flex-wrap gap-6 mt-10 p-6 neo-glass rounded-2xl border border-white/5">
+                        {[{ c: '#40e0d0', l: 'Qualité Optimale' }, { c: '#fcd34d', l: 'Vigilance' }, { c: '#f43f5e', l: 'Critique' }].map(i => (
+                            <div key={i.l} className="flex items-center gap-3 text-[10px] font-black text-text-dim uppercase tracking-widest"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: i.c }} /> {i.l}</div>
+                        ))}
                     </div>
                 </div>
 
-                {/* Panel droite */}
-                <div className="space-y-4">
-
-                    {/* Info zone survolée */}
+                <div className="space-y-8">
                     <AnimatePresence mode="wait">
-                        {hoveredZone && (
-                            <motion.div
-                                key={hoveredZone.id}
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4">
-                                <h3 className="font-bold text-white text-lg">{hoveredZone.label}</h3>
-                                <div className="mt-3 space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">Pollution</span>
-                                        <span className={`font-bold ${hoveredZone.pollution > 70 ? 'text-red-400' : hoveredZone.pollution > 45 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                            {hoveredZone.pollution} ppm
-                                        </span>
+                        {hoveredZone ? (
+                            <motion.div key={hoveredZone.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="neo-card p-8 bg-gradient-to-br from-turquoise/10 to-transparent border-turquoise/20">
+                                <h3 className="text-2xl font-black text-white tracking-tighter mb-6">{hoveredZone.label}</h3>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center py-3 border-b border-white/5">
+                                        <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Niveau Pollution</span>
+                                        <span className={`text-lg font-black ${hoveredZone.pollution > 70 ? 'text-rose-400' : 'text-turquoise'}`}>{hoveredZone.pollution} ppm</span>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">Capteurs</span>
-                                        <span className="text-white">
-                                            {capteurs.filter(c => c.zone === hoveredZone.id).length}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">État</span>
-                                        <span className={`font-bold ${hoveredZone.pollution > 70 ? 'text-red-400' : 'text-emerald-400'}`}>
-                                            {hoveredZone.pollution > 70 ? '🚨 ALERTE' : '✅ STABLE'}
-                                        </span>
+                                    <div className="flex justify-between items-center py-3 border-b border-white/5">
+                                        <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">Capteurs Actifs</span>
+                                        <span className="text-lg font-black text-white">{capteurs.filter(c => c.zone === hoveredZone.id).length}</span>
                                     </div>
                                 </div>
                             </motion.div>
+                        ) : (
+                            <div className="neo-card p-8 text-center border-dashed border-white/5 bg-white/[0.01]">
+                                <MapIcon className="w-12 h-12 text-text-dim opacity-20 mx-auto mb-4" />
+                                <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Survoler une zone</p>
+                            </div>
                         )}
                     </AnimatePresence>
 
-                    {/* Info élément sélectionné */}
-                    <AnimatePresence mode="wait">
-                        {selected && (
-                            <motion.div
-                                key={`${selected.type}-${selected.data.id}`}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0 }}
-                                className="bg-gray-800/60 border border-gray-600/40 rounded-xl p-4">
-                                <div className="flex justify-between items-start mb-3">
-                                    <h4 className="font-bold text-white capitalize">
-                                        {selected.type === 'capteur' ? '📡 Capteur' : '🚗 Véhicule'} #{selected.data.id}
-                                    </h4>
-                                    <button onClick={() => setSelected(null)}
-                                        className="text-gray-500 hover:text-white text-xs">✕</button>
-                                </div>
-                                {selected.type === 'capteur' && (
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Type</span>
-                                            <span className="text-white">{selected.data.type}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Zone</span>
-                                            <span className="text-white">{selected.data.zone}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Statut</span>
-                                            <span style={{ color: capteurColor(selected.data.statut) }}
-                                                className="font-bold">{selected.data.statut}</span>
-                                        </div>
+                    <div className="neo-card p-8 bg-black/40">
+                        <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em] mb-8 flex items-center gap-3"><Activity className="w-4 h-4 text-turquoise" /> Alertes Critiques</h4>
+                        <div className="space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                            {capteurs.filter(c => c.statut === 'HORS_SERVICE').concat(vehicules.filter(v => v.statut === 'EN_PANNE')).map((item, i) => (
+                                <div key={i} className="p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl flex items-center gap-4">
+                                    <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-black text-white uppercase tracking-tight">{item.zone ? `Capteur ${item.id}` : `Véhicule ${item.id}`}</span>
+                                        <span className="text-[8px] text-rose-400 font-black uppercase tracking-widest">Incident Critique</span>
                                     </div>
-                                )}
-                                {selected.type === 'vehicule' && (
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Type</span>
-                                            <span className="text-white">{vehiculeIcon(selected.data.type)} {selected.data.type}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">Statut</span>
-                                            <span style={{ color: vehiculeColor(selected.data.statut) }}
-                                                className="font-bold">{selected.data.statut}</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    {/* Liste alertes temps réel */}
-                    <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <Activity className="w-3 h-3" /> Alertes temps réel
-                        </h4>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {capteurs.filter(c => c.statut === 'HORS_SERVICE').map(c => (
-                                <div key={c.id}
-                                    className="flex items-center gap-2 text-xs bg-red-500/10 border border-red-500/20 rounded-lg p-2">
-                                    <AlertTriangle className="w-3 h-3 text-red-400 flex-shrink-0" />
-                                    <span className="text-red-300">Capteur {c.id} HS — zone {c.zone}</span>
                                 </div>
                             ))}
-                            {vehicules.filter(v => v.statut === 'EN_PANNE').map(v => (
-                                <div key={v.id}
-                                    className="flex items-center gap-2 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
-                                    <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
-                                    <span className="text-amber-300">Véhicule {v.id} en panne ({v.type})</span>
-                                </div>
-                            ))}
-                            {capteurs.filter(c => c.statut === 'HORS_SERVICE').length === 0 &&
-                                vehicules.filter(v => v.statut === 'EN_PANNE').length === 0 && (
-                                    <div className="text-xs text-emerald-400 flex items-center gap-2">
-                                        <span>✅</span> Aucune alerte active
-                                    </div>
-                                )}
-                        </div>
-                    </div>
-
-                    {/* Stats zones */}
-                    <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
-                            Pollution par zone
-                        </h4>
-                        <div className="space-y-2">
-                            {ZONES.slice(0, 5).map(z => {
-                                const pol = zoneStats[z.id] || 0;
-                                const pct = Math.min(100, Math.round(pol / 1.5));
-                                const col = pol > 70 ? '#ef4444' : pol > 45 ? '#f59e0b' : '#10b981';
-                                return (
-                                    <div key={z.id}>
-                                        <div className="flex justify-between text-xs mb-1">
-                                            <span className="text-gray-400">{z.label}</span>
-                                            <span style={{ color: col }} className="font-bold">{pol} ppm</span>
-                                        </div>
-                                        <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                                            <motion.div
-                                                className="h-full rounded-full"
-                                                style={{ backgroundColor: col }}
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${pct}%` }}
-                                                transition={{ duration: 0.5 }}
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            {capteurs.filter(c => c.statut === 'HORS_SERVICE').length === 0 && vehicules.filter(v => v.statut === 'EN_PANNE').length === 0 && (
+                                <div className="text-center py-10 opacity-20"><p className="text-[10px] font-black uppercase tracking-widest text-turquoise">Système Nominal</p></div>
+                            )}
                         </div>
                     </div>
                 </div>

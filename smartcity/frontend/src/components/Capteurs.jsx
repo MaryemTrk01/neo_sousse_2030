@@ -1,29 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { Search, Filter, Download, MoreVertical, Cpu, MapPin } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { Search, Download, MoreVertical, Cpu, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useSocket } from '../SocketContext';
 
 const STATUS_MAP = {
-    'ACTIF': { color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', class: 'badge-actif' },
-    'HORS_SERVICE': { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', class: 'badge-hs' },
-    'SIGNALE': { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)', class: 'badge-signale' },
-    'EN_MAINTENANCE': { color: '#eab308', bg: 'rgba(234, 179, 8, 0.1)', class: 'badge-maintenance' },
-    'INACTIF': { color: '#94a3b8', bg: 'rgba(100, 116, 139, 0.1)', class: 'badge-inactif' },
+    ACTIF: { color: '#10b981', class: 'badge-actif', next: 'signaler', nextLabel: 'Signaler' },
+    SIGNALE: { color: '#f59e0b', class: 'badge-signale', next: 'maintenir', nextLabel: 'Maintenance' },
+    EN_MAINTENANCE: { color: '#facc15', class: 'badge-maintenance', next: 'declarer_hs', nextLabel: 'Hors Service' },
+    INACTIF: { color: '#94a3b8', class: 'badge-inactif', next: 'activer', nextLabel: 'Activer' },
+    HORS_SERVICE: { color: '#ef4444', class: 'badge-hs', next: null, nextLabel: null },
 };
 
-// Coordonnées de Sousse
 const SOUSSE_CENTER = [35.8256, 10.6084];
+
 const ZONES_COORDS = {
-    "nord": [35.8400, 10.5900],
-    "sud": [35.8100, 10.6100],
-    "centre": [35.8256, 10.6084],
-    "est": [35.8280, 10.6300],
-    "ouest": [35.8230, 10.5750],
-    "port": [35.8320, 10.6380],
+    "centre ville": [35.8256, 10.6084],
     "medina": [35.8270, 10.6120],
+    "corniche": [35.8350, 10.6250],
+    "port sousse": [35.8320, 10.6380],
+    "sahloul": [35.8380, 10.5950],
+    "khzema": [35.8450, 10.6100],
+    "hammam sousse": [35.8580, 10.5980],
+    "kantaoui": [35.8920, 10.5980],
+    "riadh": [35.8150, 10.5850],
+    "bouhsina": [35.8200, 10.6000],
+};
+
+const getStablePosition = (capteur) => {
+    const zoneKey = capteur.zone?.toLowerCase() || "";
+    const base = ZONES_COORDS[zoneKey] || SOUSSE_CENTER;
+    const id = Number(capteur.id) || 1;
+
+    return {
+        lat: base[0] + Math.sin(id * 12.9898) * 0.006,
+        lng: base[1] + Math.cos(id * 78.233) * 0.006,
+    };
+};
+
+const normalizeCapteurs = (list) => {
+    return (list || []).map((c) => {
+        const p = getStablePosition(c);
+        return { ...c, lat: p.lat, lng: p.lng };
+    });
 };
 
 export default function Capteurs({ apiBase }) {
@@ -31,85 +53,136 @@ export default function Capteurs({ apiBase }) {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
-    const [zoneFilter, setZoneFilter] = useState('ALL');
+    const { socket } = useSocket();
 
-    useEffect(() => {
-        const fetchCapteurs = async () => {
-            try {
-                const res = await axios.get(`${apiBase}/capteurs`);
-                setCapteurs(res.data.capteurs.map(c => ({
-                    ...c,
-                    // Ajouter des coords si manquantes pour la carte
-                    lat: c.lat || (ZONES_COORDS[c.zone.toLowerCase()] ? ZONES_COORDS[c.zone.toLowerCase()][0] : SOUSSE_CENTER[0] + (Math.random() - 0.5) * 0.02),
-                    lng: c.lng || (ZONES_COORDS[c.zone.toLowerCase()] ? ZONES_COORDS[c.zone.toLowerCase()][1] : SOUSSE_CENTER[1] + (Math.random() - 0.5) * 0.02)
-                })));
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchCapteurs();
+    const fetchCapteurs = useCallback(async () => {
+        try {
+            const res = await axios.get(`${apiBase}/capteurs`);
+            const data = res.data?.capteurs || [];
+            setCapteurs(normalizeCapteurs(data));
+        } catch (err) {
+            console.error("Error fetching capteurs:", err);
+        } finally {
+            setLoading(false);
+        }
     }, [apiBase]);
 
-    const filtered = capteurs.filter(c => {
-        const matchSearch = String(c.id).includes(search) || c.type.toLowerCase().includes(search.toLowerCase());
+    useEffect(() => {
+        fetchCapteurs();
+        const timer = setInterval(fetchCapteurs, 60000);
+
+        const onCapteursUpdate = (data) => {
+            console.log("CAPTEURS UPDATE RECU:", data?.length);
+            if (Array.isArray(data)) {
+                setCapteurs(normalizeCapteurs(data));
+                setLoading(false);
+            } else {
+                fetchCapteurs();
+            }
+        };
+
+        if (socket) {
+            socket.on("capteurs_update", onCapteursUpdate);
+        }
+
+        return () => {
+            clearInterval(timer);
+            if (socket) {
+                socket.off("capteurs_update", onCapteursUpdate);
+            }
+        };
+    }, [socket, fetchCapteurs]);
+
+    const handleTransition = async (id, event) => {
+        try {
+            await axios.post(`${apiBase}/capteurs/${id}/transition`, { event });
+        } catch (err) {
+            alert(err.response?.data?.error || "Erreur de transition");
+        }
+    };
+
+    const filtered = capteurs.filter((c) => {
+        const s = search.toLowerCase();
+        const matchSearch =
+            String(c.id).includes(s) ||
+            c.type?.toLowerCase().includes(s) ||
+            c.zone?.toLowerCase().includes(s);
+
         const matchStatus = statusFilter === 'ALL' || c.statut === statusFilter;
-        const matchZone = zoneFilter === 'ALL' || c.zone === zoneFilter;
-        return matchSearch && matchStatus && matchZone;
+        return matchSearch && matchStatus;
     });
 
-    const zones = [...new Set(capteurs.map(c => c.zone))];
-
-    const statusCounts = capteurs.reduce((acc, c) => {
-        acc[c.statut] = (acc[c.statut] || 0) + 1;
-        return acc;
-    }, {});
-    const pieData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
-
-    const zoneCounts = capteurs.reduce((acc, c) => {
-        acc[c.zone] = (acc[c.zone] || 0) + 1;
-        return acc;
-    }, {});
-    const barData = Object.entries(zoneCounts).map(([name, value]) => ({ name, value }));
+    const pieData = Object.entries(
+        capteurs.reduce((acc, c) => {
+            acc[c.statut] = (acc[c.statut] || 0) + 1;
+            return acc;
+        }, {})
+    ).map(([name, value]) => ({ name, value }));
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8 animate-fade-in">
             <header className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-3xl font-bold text-white">État des Capteurs</h2>
-                    <p className="text-gray-500">Gestion et monitoring du réseau urbain</p>
+                    <h2 className="text-4xl font-black text-white tracking-tighter">
+                        Capteurs <span className="text-gradient">Urbains</span>
+                    </h2>
+                    <p className="text-text-muted font-medium">
+                        Monitoring haute précision • Sousse Smart Grid
+                    </p>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-indigo-500 transition-colors">
-                    <Download className="w-4 h-4" /> Exporter PDF
-                </button>
+
+                <div className="flex gap-3">
+                    <button className="btn-primary flex items-center gap-2">
+                        <Download className="w-4 h-4" />
+                        Rapport PDF
+                    </button>
+                </div>
             </header>
 
-            {/* Map & Charts Row */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* Interactive Map */}
-                <div className="xl:col-span-2 glass-card p-4 h-[400px] overflow-hidden">
-                    <div className="flex items-center gap-2 mb-3 px-2">
-                        <MapPin className="w-4 h-4 text-indigo-400" />
-                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Localisation en temps réel</span>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <div className="xl:col-span-2 neo-card p-2 h-[450px] relative">
+                    <div className="absolute top-6 left-6 z-10 neo-glass px-4 py-2 rounded-xl border border-white/10">
+                        <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-turquoise" />
+                            <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                                Cartographie Live • {filtered.length} capteurs affichés
+                            </span>
+                        </div>
                     </div>
-                    <div className="w-full h-full rounded-xl overflow-hidden border border-gray-800">
-                        <MapContainer center={SOUSSE_CENTER} zoom={13} style={{ height: '100%', width: '100%', zIndex: 1 }} scrollWheelZoom={false}>
+
+                    <div className="w-full h-full rounded-[1rem] overflow-hidden">
+                        <MapContainer center={SOUSSE_CENTER} zoom={13} style={{ height: '100%', width: '100%' }}>
                             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-                            {filtered.map(c => (
+
+                            {filtered.map((c) => (
                                 <CircleMarker
                                     key={c.id}
                                     center={[c.lat, c.lng]}
-                                    radius={8}
-                                    fillColor={STATUS_MAP[c.statut]?.color || '#8b5cf6'}
-                                    fillOpacity={0.7}
-                                    stroke={false}
+                                    radius={10}
+                                    fillColor={STATUS_MAP[c.statut]?.color || '#3b82f6'}
+                                    fillOpacity={0.75}
+                                    stroke
+                                    weight={2}
+                                    color="white"
+                                    opacity={0.25}
                                 >
                                     <Popup>
-                                        <div className="bg-[#181d29] text-white p-1">
-                                            <p className="font-bold">Capteur #{c.id}</p>
-                                            <p className="text-xs font-mono">{c.type}</p>
-                                            <p className="text-[10px] mt-1">{c.statut} • {c.zone}</p>
+                                        <div className="bg-[#0d1117] text-white p-2 rounded-lg">
+                                            <p className="font-black text-turquoise uppercase tracking-tighter">
+                                                Capteur #{c.id}
+                                            </p>
+                                            <p className="text-xs font-bold mt-1 opacity-80">
+                                                {c.type?.toUpperCase()} • {c.zone}
+                                            </p>
+                                            <p
+                                                className="text-[10px] mt-2 py-1 px-2 rounded inline-block"
+                                                style={{
+                                                    backgroundColor: STATUS_MAP[c.statut]?.color || '#3b82f6',
+                                                    color: '#fff',
+                                                }}
+                                            >
+                                                {c.statut}
+                                            </p>
                                         </div>
                                     </Popup>
                                 </CircleMarker>
@@ -118,63 +191,83 @@ export default function Capteurs({ apiBase }) {
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    <div className="glass-card p-6 h-[190px]">
-                        <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Statuts</h4>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value">
-                                    {pieData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={STATUS_MAP[entry.name]?.color || '#8b5cf6'} />
-                                    ))}
-                                </Pie>
-                                <Tooltip contentStyle={{ backgroundColor: '#181d29', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#e2e8f0' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                <div className="neo-card p-8 flex flex-col justify-between">
+                    <div>
+                        <h4 className="text-sm font-black text-white uppercase tracking-widest mb-6 border-l-4 border-turquoise pl-3">
+                            Distribution Globale
+                        </h4>
+
+                        <div className="h-[240px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={pieData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={85}
+                                        paddingAngle={8}
+                                        dataKey="value"
+                                        stroke="none"
+                                    >
+                                        {pieData.map((entry, index) => (
+                                            <Cell key={index} fill={STATUS_MAP[entry.name]?.color || '#40e0d0'} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#0d1117',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '12px',
+                                        }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                    <div className="glass-card p-6 h-[190px]">
-                        <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Zones</h4>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={barData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                                <XAxis dataKey="name" stroke="#6b7280" fontSize={8} tickLine={false} axisLine={false} />
-                                <Tooltip contentStyle={{ backgroundColor: '#181d29', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#e2e8f0' }} />
-                                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+
+                    <div className="space-y-3 mt-4">
+                        {pieData.map((d) => (
+                            <div key={d.name} className="flex justify-between items-center px-4 py-2 bg-white/5 rounded-xl">
+                                <div className="flex items-center gap-2">
+                                    <div
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: STATUS_MAP[d.name]?.color || '#40e0d0' }}
+                                    />
+                                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                                        {d.name}
+                                    </span>
+                                </div>
+                                <span className="text-sm font-black text-white">{d.value}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
 
-            {/* Table Section */}
-            <div className="glass-card overflow-hidden">
-                <div className="p-6 border-b border-gray-800 flex flex-wrap gap-4 items-center justify-between">
+            <div className="neo-card overflow-hidden">
+                <div className="p-6 border-b border-white/5 flex flex-wrap gap-4 items-center justify-between bg-black/10">
                     <div className="flex gap-4 flex-1 min-w-[300px]">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+                        <div className="relative flex-1 group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim w-4 h-4 group-focus-within:text-turquoise transition-colors" />
                             <input
                                 type="text"
-                                placeholder="Rechercher..."
-                                className="w-full bg-[#0f111a] border border-gray-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                                placeholder="Filtrer par ID, type ou zone..."
+                                className="w-full bg-black/40 border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-turquoise/50 transition-all"
                                 value={search}
-                                onChange={e => setSearch(e.target.value)}
+                                onChange={(e) => setSearch(e.target.value)}
                             />
                         </div>
+
                         <select
-                            className="bg-[#0f111a] border border-gray-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                            className="bg-black/40 border border-white/5 rounded-2xl px-6 py-3 text-sm font-bold text-white focus:outline-none focus:border-turquoise/50"
                             value={statusFilter}
-                            onChange={e => setStatusFilter(e.target.value)}
+                            onChange={(e) => setStatusFilter(e.target.value)}
                         >
-                            <option value="ALL">Tous Statuts</option>
-                            {Object.keys(STATUS_MAP).map(k => <option key={k} value={k}>{k}</option>)}
-                        </select>
-                        <select
-                            className="bg-[#0f111a] border border-gray-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
-                            value={zoneFilter}
-                            onChange={e => setZoneFilter(e.target.value)}
-                        >
-                            <option value="ALL">Toutes Zones</option>
-                            {zones.map(z => <option key={z} value={z}>{z}</option>)}
+                            <option value="ALL">Tous les statuts</option>
+                            {Object.keys(STATUS_MAP).map((k) => (
+                                <option key={k} value={k}>{k}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -182,32 +275,65 @@ export default function Capteurs({ apiBase }) {
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
-                            <tr className="bg-gray-800/10 border-b border-gray-800">
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">ID</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Type</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Zone</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Statut</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Installation</th>
+                            <tr className="bg-white/5 border-b border-white/5">
+                                <th className="px-8 py-5 text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Réf. Capteur</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Type / Technologie</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Zone Urbaine</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">État Actuel</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Contrôle Manuel</th>
                             </tr>
                         </thead>
-                        <tbody>
+
+                        <tbody className="divide-y divide-white/5">
                             {loading ? (
-                                <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-600">Chargement...</td></tr>
-                            ) : filtered.map((c, i) => (
-                                <motion.tr
-                                    key={c.id}
-                                    className="border-b border-gray-800/50 hover:bg-white/5 transition-colors"
-                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
-                                >
-                                    <td className="px-6 py-4 font-mono text-indigo-400 font-bold text-sm">#{c.id}</td>
-                                    <td className="px-6 py-4 text-white font-semibold text-sm">{c.type}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-400">{c.zone}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`badge ${STATUS_MAP[c.statut]?.class || 'badge-inactif'}`}>{c.statut}</span>
+                                <tr>
+                                    <td colSpan="5" className="px-8 py-12 text-center text-text-dim italic">
+                                        Synchronisation avec le réseau central...
                                     </td>
-                                    <td className="px-6 py-4 text-xs text-gray-500">{c.date_installation}</td>
-                                </motion.tr>
-                            ))}
+                                </tr>
+                            ) : (
+                                filtered.map((c, i) => (
+                                    <motion.tr
+                                        key={c.id}
+                                        className="hover:bg-white/[0.02] transition-colors"
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.01 }}
+                                    >
+                                        <td className="px-8 py-5 font-black text-turquoise tracking-tighter text-base">#{c.id}</td>
+
+                                        <td className="px-8 py-5">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-blue-500/10 rounded-lg">
+                                                    <Cpu className="w-4 h-4 text-blue-400" />
+                                                </div>
+                                                <span className="text-white font-bold text-sm uppercase tracking-wide">{c.type}</span>
+                                            </div>
+                                        </td>
+
+                                        <td className="px-8 py-5 text-sm font-semibold text-text-muted">{c.zone}</td>
+
+                                        <td className="px-8 py-5">
+                                            <span className={`badge ${STATUS_MAP[c.statut]?.class || 'badge-inactif'}`}>
+                                                <span className="status-dot bg-current"></span>
+                                                {c.statut}
+                                            </span>
+                                        </td>
+
+                                        <td className="px-8 py-5">
+                                            {STATUS_MAP[c.statut]?.next && (
+                                                <button
+                                                    onClick={() => handleTransition(c.id, STATUS_MAP[c.statut].next)}
+                                                    className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black text-white hover:bg-turquoise hover:text-black hover:border-turquoise transition-all uppercase tracking-widest flex items-center gap-2"
+                                                >
+                                                    <MoreVertical className="w-3 h-3" />
+                                                    {STATUS_MAP[c.statut].nextLabel}
+                                                </button>
+                                            )}
+                                        </td>
+                                    </motion.tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
                 </div>

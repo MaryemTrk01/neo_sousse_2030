@@ -11,13 +11,13 @@ import psycopg2
 import psycopg2.extras
 from contextlib import contextmanager
 
-# ── Config BD directe (port 5434, password salma) ──
+# ── Config BD directe (port 5433, password salma) ──
 DB_CONFIG = {
     "host":            "localhost",
-    "port":            5434,
+    "port":            5433,
     "dbname":          "smartcity",
     "user":            "postgres",
-    "password":        "salma",
+    "password":        "14614114",
     "client_encoding": "utf8"
 }
 

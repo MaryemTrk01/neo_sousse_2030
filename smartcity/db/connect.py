@@ -6,9 +6,9 @@ def get_data(query):
         conn = psycopg2.connect(
             dbname="smartcity",       # nom de ta base
             user="postgres",          # ton utilisateur
-            password="salma",   # ton mot de passe
+            password="14614114",   # ton mot de passe
             host="localhost",         # serveur
-            port="5434"               # port par défaut
+            port="5433"               # port par défaut
         )
         conn.set_client_encoding('UTF8')  # 🔹 corrige les problèmes d'accents
         cur = conn.cursor()

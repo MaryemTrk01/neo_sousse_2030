@@ -13,10 +13,10 @@ from contextlib import contextmanager
 
 DB_CONFIG = {
     "host":     "localhost",
-    "port":     5434,
+    "port":     5433,
     "dbname":   "smartcity",
     "user":     "postgres",
-    "password": "salma"
+    "password": "14614114"
 }
 
 # ─────────────────────────────────────────────
@@ -54,11 +54,11 @@ def test_connection():
         with get_cursor() as cur:
             cur.execute("SELECT version();")
             version = cur.fetchone()
-            print(f"✅ Connexion réussie !")
+            print(f"[OK] Connexion reussie !")
             print(f"   PostgreSQL : {version['version'][:50]}")
             return True
     except Exception as e:
-        print(f"❌ Connexion échouée : {e}")
+        print(f"[ERROR] Connexion echouee : {e}")
         return False
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import { MessageSquare, Send, Sparkles, User, Bot, Trash2 } from 'lucide-react';
 
 export default function ChatIA({ apiBase }) {
     const [messages, setMessages] = useState([
-        { role: 'assistant', content: "Bonjour ! Je suis ARIA, l'IA de gestion de Neo-Sousse 2030. Comment puis-je vous aider aujourd'hui ?" }
+        { role: 'assistant', content: "Système ARIA initialisé. Je suis à votre écoute pour toute requête analytique ou opérationnelle sur le réseau Neo-Sousse." }
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -17,7 +17,6 @@ export default function ChatIA({ apiBase }) {
 
     const handleSend = async () => {
         if (!input.trim() || loading) return;
-
         const userMsg = input.trim();
         setInput('');
         setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
@@ -27,55 +26,49 @@ export default function ChatIA({ apiBase }) {
             const res = await axios.post(`${apiBase}/chat`, { question: userMsg });
             setMessages(prev => [...prev, { role: 'assistant', content: res.data.reponse }]);
         } catch (err) {
-            setMessages(prev => [...prev, { role: 'assistant', content: "Désolée, j'ai rencontré un problème technique lors de la connexion au serveur." }]);
+            setMessages(prev => [...prev, { role: 'assistant', content: "Interruption du flux de données. Veuillez vérifier la connexion au noyau central." }]);
         } finally {
             setLoading(false);
         }
     };
 
-    const clearChat = () => {
-        setMessages([{ role: 'assistant', content: "Conversation réinitialisée. Que voulez-vous savoir ?" }]);
-    };
-
     return (
-        <div className="flex flex-col h-[calc(100vh-180px)] max-w-4xl mx-auto glass-card overflow-hidden">
-            {/* Chat Header */}
-            <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-gray-800/20">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 relative">
-                        <Bot className="text-white w-6 h-6" />
-                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#11141d] rounded-full" />
+        <div className="flex flex-col h-[calc(100vh-200px)] max-w-5xl mx-auto neo-card overflow-hidden bg-black/40 animate-fade-in">
+            {/* Header ARIA */}
+            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-turquoise/5 to-transparent">
+                <div className="flex items-center gap-6">
+                    <div className="relative">
+                        <div className="w-14 h-14 rounded-2xl bg-bg-deep flex items-center justify-center border border-turquoise/30 shadow-[0_0_20px_rgba(64,224,208,0.2)]">
+                            <Bot className="text-turquoise w-8 h-8" />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-turquoise rounded-full border-4 border-bg-deep animate-pulse" />
                     </div>
                     <div>
-                        <h3 className="font-bold text-white tracking-tight">ARIA Assistant</h3>
-                        <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">IA Centrale de la Ville</p>
+                        <h3 className="text-xl font-black text-white tracking-tighter">ARIA Assistant</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                            <div className="w-2 h-2 rounded-full bg-turquoise animate-ping" />
+                            <span className="text-[10px] text-turquoise font-black uppercase tracking-[0.2em]">Cœur Cognitif Actif</span>
+                        </div>
                     </div>
                 </div>
-                <button
-                    onClick={clearChat}
-                    className="p-2 text-gray-500 hover:text-rose-400 transition-colors"
-                    title="Effacer le chat"
-                >
+                <button onClick={() => setMessages([{ role: 'assistant', content: "Mémoire réinitialisée. Nouvelle session active." }])} 
+                    className="p-3 text-text-dim hover:text-rose-400 hover:bg-rose-500/5 rounded-2xl transition-all">
                     <Trash2 className="w-5 h-5" />
                 </button>
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black/10">
+            <div className="flex-1 overflow-y-auto p-10 space-y-8 custom-scrollbar">
                 {messages.map((msg, i) => (
-                    <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                        <div className={`flex gap-4 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-indigo-600' : 'bg-gray-800'}`}>
-                                {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Sparkles className="w-4 h-4 text-indigo-400" />}
+                    <motion.div key={i} initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }} animate={{ opacity: 1, x: 0 }}
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex gap-4 max-w-[75%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border border-white/10 ${msg.role === 'user' ? 'bg-turquoise text-black' : 'bg-white/5 text-turquoise'}`}>
+                                {msg.role === 'user' ? <User className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
                             </div>
-                            <div className={`p-4 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
-                                    ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg'
-                                    : 'bg-gray-800/80 text-gray-200 rounded-tl-none border border-gray-700/50'
+                            <div className={`p-6 rounded-3xl text-sm font-medium leading-relaxed ${msg.role === 'user'
+                                    ? 'bg-white/10 text-white rounded-tr-none border border-white/10 shadow-2xl backdrop-blur-md'
+                                    : 'neo-glass text-white/90 rounded-tl-none border-turquoise/20'
                                 }`}>
                                 {msg.content}
                             </div>
@@ -84,14 +77,14 @@ export default function ChatIA({ apiBase }) {
                 ))}
                 {loading && (
                     <div className="flex justify-start">
-                        <div className="flex gap-4 max-w-[80%]">
-                            <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center shrink-0">
-                                <Sparkles className="w-4 h-4 text-indigo-400 animate-spin" />
+                        <div className="flex gap-4 max-w-[75%]">
+                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
+                                <Sparkles className="w-5 h-5 text-turquoise animate-spin" />
                             </div>
-                            <div className="p-4 bg-gray-800/80 rounded-2xl rounded-tl-none border border-gray-700/50 flex gap-1">
-                                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
-                                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                            <div className="p-6 neo-glass rounded-3xl rounded-tl-none border-turquoise/20 flex gap-2">
+                                <span className="w-2 h-2 bg-turquoise rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                                <span className="w-2 h-2 bg-turquoise rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                                <span className="w-2 h-2 bg-turquoise rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
                             </div>
                         </div>
                     </div>
@@ -100,25 +93,26 @@ export default function ChatIA({ apiBase }) {
             </div>
 
             {/* Input Area */}
-            <div className="p-6 bg-gray-800/20 border-t border-gray-800">
-                <div className="flex gap-4 relative">
+            <div className="p-8 bg-black/40 border-t border-white/5 backdrop-blur-xl">
+                <div className="max-w-3xl mx-auto relative group">
                     <input
                         type="text"
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSend()}
-                        placeholder="Posez une question sur la base de données ou la ville..."
-                        className="flex-1 bg-[#0f111a] border-2 border-gray-800 rounded-xl px-6 py-4 pr-16 text-sm focus:outline-none focus:border-indigo-500 transition-all text-white"
+                        placeholder="Interrogez ARIA sur les statistiques, l'état des services..."
+                        className="w-full bg-white/5 border border-white/10 rounded-[2rem] px-8 py-5 pr-20 text-sm font-medium text-white focus:outline-none focus:border-turquoise/50 focus:bg-white/[0.08] transition-all placeholder-white/20 shadow-inner"
                     />
-                    <button
-                        onClick={handleSend}
-                        disabled={!input.trim() || loading}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all active:scale-90 disabled:opacity-30 disabled:bg-gray-700"
-                    >
+                    <button onClick={handleSend} disabled={!input.trim() || loading}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 bg-turquoise hover:bg-turquoise/80 text-black rounded-full flex items-center justify-center transition-all shadow-[0_0_15px_rgba(64,224,208,0.4)] active:scale-90 disabled:opacity-20 disabled:grayscale">
                         <Send className="w-5 h-5" />
                     </button>
                 </div>
-                <p className="text-[10px] text-gray-600 mt-4 text-center">ARIA est connectée à la base PostgreSQL en lecture seule pour assurer la sécurité.</p>
+                <div className="mt-6 flex justify-center items-center gap-6 opacity-40">
+                    <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-turquoise" /> <span className="text-[9px] font-black uppercase tracking-widest text-white">Sécurité SSL</span></div>
+                    <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-turquoise" /> <span className="text-[9px] font-black uppercase tracking-widest text-white">Noyau Ollama v3</span></div>
+                    <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-turquoise" /> <span className="text-[9px] font-black uppercase tracking-widest text-white">Mode Analyste</span></div>
+                </div>
             </div>
         </div>
     );

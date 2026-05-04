@@ -43,7 +43,8 @@ const FSM_DEFS = {
             { from: 'STATIONNE', to: 'EN_ROUTE', label: 'demarrer' },
             { from: 'EN_ROUTE', to: 'EN_PANNE', label: 'panne' },
             { from: 'EN_ROUTE', to: 'ARRIVE', label: 'arriver' },
-            { from: 'EN_PANNE', to: 'ARRIVE', label: 'arriver' },
+            { from: 'EN_PANNE', to: 'STATIONNE', label: 'reparer' },
+            { from: 'ARRIVE', to: 'EN_ROUTE', label: 'demarrer' },
         ]
     }
 };
@@ -96,46 +97,56 @@ export default function Automates({ apiBase }) {
     const [loading, setLoading] = useState(false);
     const { socket } = useSocket();
 
-    // Fetch entities based on selected FSM
-    const fetchEntities = useCallback(async () => {
+    const fetchEntities = useCallback(async (refreshSelected = false) => {
         try {
             const endpoint = selectedFsm === 'capteur' ? 'capteurs' : (selectedFsm === 'intervention' ? 'interventions' : 'vehicules');
             const res = await axios.get(`${apiBase}/${endpoint}`);
             const list = res.data[endpoint] || [];
             setEntities(list);
-            if (list.length > 0) {
-                setSelectedEntity(list[0]);
+            
+            if (refreshSelected || !selectedEntity) {
+                if (list.length > 0) setSelectedEntity(list[0]);
+                else setSelectedEntity(null);
             } else {
-                setSelectedEntity(null);
+                // Mettre à jour l'entité sélectionnée avec ses nouvelles données
+                const updated = list.find(e => e.id === selectedEntity.id);
+                if (updated) setSelectedEntity(updated);
             }
-        } catch (err) {
-            console.error(err);
-        }
-    }, [apiBase, selectedFsm]);
+        } catch (err) { console.error(err); }
+    }, [apiBase, selectedFsm, selectedEntity]);
 
     useEffect(() => {
-        fetchEntities();
+        fetchEntities(true);
+    }, [selectedFsm]); // Seul changement de type d'automate reset la sélection
 
+    useEffect(() => {
+        const timer = setInterval(() => fetchEntities(false), 60000);
+        return () => clearInterval(timer);
+    }, [fetchEntities]);
+
+    useEffect(() => {
         if (socket) {
-            socket.on('status_change', (data) => {
-                if (data.type === selectedFsm) {
-                    console.log("🔗 Real-time FSM update", data);
-                    fetchEntities();
+            const handleStatusChange = (data) => {
+                if (data.entity === selectedFsm) {
+                    setEntities(prev => prev.map(e => (
+                        e.id === data.id ? { ...e, statut: data.new_status } : e
+                    )));
+                    setSelectedEntity(prev => (
+                        prev?.id === data.id ? { ...prev, statut: data.new_status } : prev
+                    ));
+                    fetchEntities(false); // Rafraîchir sans reset la sélection
                 }
-            });
+            };
+            socket.on('status_change', handleStatusChange);
+            return () => socket.off('status_change', handleStatusChange);
         }
-        return () => {
-            if (socket) socket.off('status_change');
-        };
-    }, [fetchEntities, socket, selectedFsm]);
+    }, [socket, selectedFsm, fetchEntities]);
 
-    // Update Flow when entity state changes
     useEffect(() => {
         if (selectedEntity) {
             const { nodes: n, edges: e } = getFlowData(selectedFsm, selectedEntity.statut);
             setNodes(n);
             setEdges(e);
-            setValidation(null);
         } else {
             const { nodes: n, edges: e } = getFlowData(selectedFsm, null);
             setNodes(n);
@@ -147,161 +158,139 @@ export default function Automates({ apiBase }) {
         if (!selectedEntity) return;
         setLoading(true);
         try {
-            // 1. Validation IA
-            const valRes = await axios.post(`${apiBase}/valider-transition`, {
-                entite: selectedFsm,
-                etat_actuel: selectedEntity.statut,
-                evenement: trigger,
-                etat_suivant: nextState
+            const endpoint = selectedFsm === 'capteur' ? 'capteurs' : (selectedFsm === 'vehicule' ? 'vehicules' : 'interventions');
+            const res = await axios.post(`${apiBase}/${endpoint}/${selectedEntity.id}/transition`, {
+                event: trigger
             });
-            setValidation(valRes.data);
-
-            if (valRes.data.valide) {
-                // 2. Execution réelle
-                await axios.post(`${apiBase}/automates/transition`, {
-                    entite: selectedFsm,
-                    id: selectedEntity.id,
-                    trigger: nextState // Simplifié dans mon backend v3.0
-                });
-                // 3. Refresh
-                setTimeout(fetchEntities, 1000);
+            
+            if (res.data.success) {
+                setSelectedEntity(prev => prev ? { ...prev, statut: res.data.new_status } : prev);
+                setEntities(prev => prev.map(e => (
+                    e.id === selectedEntity.id ? { ...e, statut: res.data.new_status } : e
+                )));
+                // Le rafraîchissement se fera via le socket 'status_change'
+                setValidation({ valide: true, justification: `Transition vers ${nextState} approuvée par le système.` });
+            } else {
+                setValidation({ valide: false, justification: res.data.error || "Transition refusée." });
             }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
+        } catch (err) { 
+            console.error(err); 
+            setValidation({ valide: false, justification: err.response?.data?.error || "Erreur lors de la transition." });
         }
+        finally { setLoading(false); }
     };
 
     const availableTransitions = FSM_DEFS[selectedFsm].transitions.filter(t => t.from === selectedEntity?.statut);
 
     return (
-        <div className="space-y-6 h-full flex flex-col">
-            <header className="flex justify-between items-center">
+        <div className="space-y-8 animate-fade-in flex flex-col h-full">
+            <header className="flex justify-between items-end">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-white flex items-center gap-3">
-                        <GitBranch className="text-indigo-500 w-8 h-8" />
-                        Automates Finis & Transitions IA
+                    <h2 className="text-4xl font-black text-white tracking-tighter">
+                        Logique <span className="text-gradient">Automate</span>
                     </h2>
-                    <p className="text-gray-500 mt-2">Pilotage dynamique des états opérationnels avec validation IA</p>
+                    <p className="text-text-muted font-medium">Validation formelle des transitions d'états • Neo-Sousse Core</p>
                 </div>
-                <div className="flex gap-2 p-1 bg-gray-800/40 rounded-xl border border-gray-800">
+                <div className="flex gap-2 p-1.5 neo-glass rounded-2xl border border-white/5">
                     {['capteur', 'intervention', 'vehicule'].map(key => (
-                        <button
-                            key={key}
-                            onClick={() => setSelectedFsm(key)}
-                            className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${selectedFsm === key ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-gray-500 hover:text-gray-300'}`}
-                        >
+                        <button key={key} onClick={() => setSelectedFsm(key)}
+                            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedFsm === key ? 'bg-turquoise text-black shadow-lg shadow-turquoise/20' : 'text-text-dim hover:text-white'}`}>
                             {key}
                         </button>
                     ))}
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-[600px]">
-                {/* Entity Selector Sidebar */}
-                <div className="glass-card p-4 overflow-y-auto">
-                    <div className="flex justify-between items-center mb-6">
-                        <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Entités de la Flotte</h4>
-                        <button onClick={fetchEntities} className="text-indigo-400 hover:text-indigo-300"><RefreshCcw className="w-3 h-3" /></button>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1 min-h-[650px]">
+                <div className="neo-card p-6 flex flex-col bg-black/40">
+                    <div className="flex justify-between items-center mb-8">
+                        <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Réseau de Flotte</h4>
+                        <button onClick={fetchEntities} className="p-2 hover:bg-white/5 rounded-lg transition-colors text-turquoise"><RefreshCcw className="w-4 h-4" /></button>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
                         {entities.map(e => (
-                            <button
-                                key={e.id}
-                                onClick={() => setSelectedEntity(e)}
-                                className={`w-full p-3 rounded-lg border text-left flex justify-between items-center transition-all ${selectedEntity?.id === e.id ? 'bg-indigo-600/10 border-indigo-500/30 text-indigo-400' : 'border-gray-800/50 hover:border-gray-700 text-gray-500'}`}
-                            >
-                                <span className="text-xs font-bold">#{e.id} {selectedFsm}</span>
-                                <span className="text-[8px] opacity-70 px-2 py-0.5 rounded-full bg-black/20">{e.statut}</span>
+                            <button key={e.id} onClick={() => setSelectedEntity(e)}
+                                className={`w-full p-4 rounded-2xl border text-left flex flex-col gap-2 transition-all group ${selectedEntity?.id === e.id ? 'bg-turquoise/10 border-turquoise/40' : 'bg-white/5 border-white/5 hover:border-white/10'}`}>
+                                <div className="flex justify-between items-center">
+                                    <span className={`text-xs font-black uppercase tracking-tight ${selectedEntity?.id === e.id ? 'text-turquoise' : 'text-white'}`}>ID #{e.id}</span>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-turquoise shadow-[0_0_5px_rgba(64,224,208,0.5)]" />
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-text-dim opacity-60">{e.statut}</span>
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {/* Diagram Area */}
-                <div className="lg:col-span-2 glass-card relative flex flex-col">
-                    <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full border border-gray-800">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Visualisation Interactive</span>
+                <div className="lg:col-span-2 neo-card relative overflow-hidden flex flex-col bg-black/40">
+                    <div className="absolute top-6 left-6 z-10 p-3 neo-glass rounded-xl border border-white/10 flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full bg-turquoise animate-pulse" />
+                        <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Simulation Temps-Réel</span>
                     </div>
 
-                    <div className="flex-1 min-h-[400px]">
-                        <ReactFlow
-                            nodes={nodes}
-                            edges={edges}
-                            onNodesChange={onNodesChange}
-                            onEdgesChange={onEdgesChange}
-                            fitView
-                            nodesDraggable={false}
-                            zoomOnScroll={false}
-                            panOnScroll={true}
-                        >
-                            <Background color="#1f2937" gap={20} />
-                            <Controls className="bg-gray-800 border-gray-700" />
+                    <div className="flex-1">
+                        <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} fitView nodesDraggable={false} zoomOnScroll={false} panOnScroll={true}>
+                            <Background color="rgba(255,255,255,0.03)" gap={24} />
+                            <Controls className="!bg-bg-deep !border-white/10 !rounded-xl !shadow-2xl" />
                         </ReactFlow>
                     </div>
 
-                    <div className="p-6 border-t border-gray-800 bg-black/20">
+                    <div className="p-8 border-t border-white/5 bg-gradient-to-t from-bg-deep to-transparent">
                         <div className="flex justify-between items-center">
-                            <div>
-                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Actions disponibles</p>
+                            <div className="space-y-4">
+                                <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Actions de Transition Sécurisées</p>
                                 <div className="flex gap-3">
                                     {availableTransitions.length > 0 ? availableTransitions.map((t, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={() => handleTransition(t.label, t.to)}
-                                            disabled={loading}
-                                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 rounded-lg text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
-                                        >
-                                            <Play className="w-3 h-3" />
-                                            Déclencher "{t.label}"
+                                        <button key={idx} onClick={() => handleTransition(t.label, t.to)} disabled={loading}
+                                            className="btn-primary flex items-center gap-3 px-6 py-3 shadow-turquoise/20">
+                                            <Play className="w-4 h-4" />
+                                            <span className="font-black uppercase tracking-widest text-[10px]">{t.label}</span>
                                         </button>
-                                    )) : <span className="text-xs text-gray-600 italic">Aucune transition possible depuis cet état.</span>}
+                                    )) : <span className="text-xs text-text-muted font-bold italic opacity-40 uppercase tracking-widest">Aucune transition formelle autorisée</span>}
                                 </div>
                             </div>
-                            {loading && <div className="flex items-center gap-2 text-indigo-400 text-[10px] font-bold animate-pulse"><RefreshCcw className="w-3 h-3 animate-spin" /> IA Processing...</div>}
+                            {loading && (
+                                <div className="flex items-center gap-3 text-turquoise text-[10px] font-black animate-pulse uppercase tracking-[0.2em]">
+                                    <RefreshCcw className="w-4 h-4 animate-spin" /> Audit IA en cours...
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* IA Validation Sidebar */}
-                <div className="glass-card p-6 flex flex-col gap-6">
-                    <div>
-                        <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-1">
-                            <GitBranch className="w-3 h-3" /> État Courant : {selectedEntity?.statut || 'N/A'}
+                <div className="space-y-8">
+                    <div className="neo-card p-8 bg-gradient-to-br from-turquoise/5 to-transparent">
+                        <h4 className="text-[10px] font-black text-turquoise uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
+                            <GitBranch className="w-4 h-4" /> Analyse d'État
                         </h4>
-                        <div className="p-4 bg-gray-800/40 rounded-xl border border-gray-800/60">
-                            <p className="text-[10px] text-gray-500 uppercase font-black">Description du Statut</p>
-                            <p className="text-xs text-gray-300 mt-2 leading-relaxed">
-                                L'entité est actuellement en mode <b>{selectedEntity?.statut}</b>.
-                                Ce stade permet {availableTransitions.length} actions opérationnelles sécurisées.
+                        <div className="p-6 bg-black/40 rounded-2xl border border-white/5 shadow-inner">
+                            <p className="text-[10px] text-text-dim uppercase font-black tracking-widest mb-3">Contexte Actuel</p>
+                            <p className="text-sm text-white/80 leading-relaxed font-bold">
+                                {selectedEntity ? (
+                                    <>L'entité #{selectedEntity.id} est verrouillée sur l'état <span className="text-turquoise">"{selectedEntity.statut}"</span>. Ce cycle autorise {availableTransitions.length} mutations logiques.</>
+                                ) : <>Sélectionnez une entité pour auditer sa logique.</>}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex-1 border-t border-gray-800 pt-6">
-                        <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-1">
-                            <Info className="w-3 h-3" /> Validation IA
+                    <div className="neo-card p-8 flex-1 border-dashed border-white/10 bg-white/[0.01]">
+                        <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
+                            <Info className="w-4 h-4 text-turquoise" /> Rapport d'Audit IA
                         </h4>
                         {validation ? (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className={`p-4 rounded-xl border ${validation.valide ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}
-                            >
-                                <div className="flex items-center gap-2 mb-2">
-                                    {validation.valide ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-                                    <span className={`text-[10px] font-black uppercase ${validation.valide ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {validation.valide ? 'Transition Approuvée' : 'Transition Rejetée'}
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                                className={`p-6 rounded-2xl border ${validation.valide ? 'bg-turquoise/5 border-turquoise/30' : 'bg-rose-500/5 border-rose-500/30'}`}>
+                                <div className="flex items-center gap-3 mb-4">
+                                    {validation.valide ? <CheckCircle2 className="w-5 h-5 text-turquoise" /> : <AlertCircle className="w-5 h-5 text-rose-400" />}
+                                    <span className={`text-[11px] font-black uppercase tracking-widest ${validation.valide ? 'text-turquoise' : 'text-rose-400'}`}>
+                                        {validation.valide ? 'Approbation Formelle' : 'Violation Détectée'}
                                     </span>
                                 </div>
-                                <p className="text-[10px] text-gray-300 italic">"{validation.justification}"</p>
+                                <p className="text-xs text-white/70 italic leading-relaxed font-medium">"{validation.justification}"</p>
                             </motion.div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-center py-10 opacity-30">
-                                <GitBranch className="w-8 h-8 mb-4" />
-                                <p className="text-[10px] font-bold uppercase tracking-widest">En attente de transaction</p>
+                            <div className="flex flex-col items-center justify-center py-12 text-center opacity-20">
+                                <GitBranch className="w-12 h-12 mb-4" />
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Audit Prêt</p>
                             </div>
                         )}
                     </div>

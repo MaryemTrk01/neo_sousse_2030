@@ -1,21 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Accueil from './components/Accueil';
 import Capteurs from './components/Capteurs';
 import Interventions from './components/Interventions';
 import QualiteAir from './components/QualiteAir';
 import Compilateur from './components/Compilateur';
-import LabCompilation from './components/LabCompilation';
 import Rapports from './components/Rapports';
 import Automates from './components/Automates';
 import CarteUrbaine from './components/CarteUrbaine';
 import ChatIA from './components/ChatIA';
 import Statistiques from './components/Statistiques';
+import Vehicules from './components/Vehicules';
 import { AnimatePresence, motion } from 'framer-motion';
 import axios from 'axios';
 import { SocketProvider, useSocket } from './SocketContext';
-import Vehicules from './components/Vehicules';
-
 
 const API_BASE = '/api';
 
@@ -23,40 +21,131 @@ function AppContent() {
     const [activePage, setActivePage] = useState('dashboard');
     const [globalStats, setGlobalStats] = useState(null);
     const [alertsCount, setAlertsCount] = useState(0);
+    const [vehiculesPanne, setVehiculesPanne] = useState(0);
     const [showNotification, setShowNotification] = useState(null);
+
     const { socket, lastAlert } = useSocket();
 
-    // Init et WebSockets
+    const applyStats = useCallback((data) => {
+        if (!data) return;
+
+        setGlobalStats(data);
+        setAlertsCount((data.capteurs_hs || 0) + (data.capteurs_signales || 0));
+        setVehiculesPanne(data.vehicules_en_panne || 0);
+    }, []);
+
+    const applyCapteursToDashboard = useCallback((capteurs) => {
+        if (!Array.isArray(capteurs)) return;
+
+        const capteurs_actifs = capteurs.filter(c => c.statut === 'ACTIF').length;
+        const capteurs_hs = capteurs.filter(c => c.statut === 'HORS_SERVICE').length;
+        const capteurs_signales = capteurs.filter(c => c.statut === 'SIGNALE').length;
+        const capteurs_maintenance = capteurs.filter(c => c.statut === 'EN_MAINTENANCE').length;
+        const capteurs_inactifs = capteurs.filter(c => c.statut === 'INACTIF').length;
+
+        setGlobalStats(prev => ({
+            ...(prev || {}),
+            total_capteurs: capteurs.length,
+            capteurs_actifs,
+            capteurs_hs,
+            capteurs_signales,
+            capteurs_maintenance,
+            capteurs_inactifs,
+        }));
+
+        setAlertsCount(capteurs_hs + capteurs_signales);
+    }, []);
+
+    const applyVehiculesToDashboard = useCallback((vehicules) => {
+        if (!Array.isArray(vehicules)) return;
+
+        const vehicules_en_route = vehicules.filter(v => v.statut === 'EN_ROUTE').length;
+        const vehicules_en_panne = vehicules.filter(v => v.statut === 'EN_PANNE').length;
+        const vehicules_stationnes = vehicules.filter(v => v.statut === 'STATIONNE').length;
+        const vehicules_arrives = vehicules.filter(v => v.statut === 'ARRIVE').length;
+
+        setGlobalStats(prev => ({
+            ...(prev || {}),
+            total_vehicules: vehicules.length,
+            vehicules_en_route,
+            vehicules_en_panne,
+            vehicules_stationnes,
+            vehicules_arrives,
+        }));
+
+        setVehiculesPanne(vehicules_en_panne);
+    }, []);
+
+    const applyInterventionsToDashboard = useCallback((interventions) => {
+        if (!Array.isArray(interventions)) return;
+
+        const interventions_terminees = interventions.filter(i => i.statut === 'TERMINE').length;
+        const interventions_en_cours = interventions.filter(i => i.statut !== 'TERMINE').length;
+
+        setGlobalStats(prev => ({
+            ...(prev || {}),
+            total_interventions: interventions.length,
+            interventions_en_cours,
+            interventions_terminees,
+        }));
+    }, []);
+
+    const fetchGlobal = useCallback(async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/dashboard`);
+            applyStats(res.data);
+        } catch (err) {
+            console.error("Erreur dashboard", err);
+        }
+    }, [applyStats]);
+
     useEffect(() => {
-        // Initial fetch
-        const fetchGlobal = async () => {
-            try {
-                const res = await axios.get(`${API_BASE}/dashboard`);
-                setGlobalStats(res.data);
-                setAlertsCount(res.data.capteurs_hs || 0);
-            } catch (err) {
-                console.error("Erreur initial fetch", err);
-            }
-        };
         fetchGlobal();
 
+        const dashboardTimer = setInterval(fetchGlobal, 60000);
+
+        const onMetricsUpdate = (data) => {
+            console.log("Dashboard metrics_update reçu", data);
+            applyStats(data);
+        };
+
+        const onCapteursUpdate = (capteurs) => {
+            console.log("Dashboard capteurs_update reçu", capteurs?.length);
+            applyCapteursToDashboard(capteurs);
+        };
+
+        const onVehicleUpdate = (vehicules) => {
+            applyVehiculesToDashboard(vehicules);
+        };
+
+        const onInterventionUpdate = (interventions) => {
+            applyInterventionsToDashboard(interventions);
+        };
+
+        const onStatusChange = () => {
+            fetchGlobal();
+        };
+
         if (socket) {
-            // Mise à jour temps réel des métriques (toutes les 10s via le serveur)
-            socket.on('metrics_update', (data) => {
-                console.log("📈 Real-time metrics update", data);
-                setGlobalStats(data);
-                setAlertsCount(data.capteurs_hs || 0);
-            });
-
-            // Changements de statut automates
-            socket.on('status_change', (data) => {
-                console.log("🔄 Status change detected", data);
-                // On peut déclencher un rafraîchissement ou une alerte
-            });
+            socket.on("metrics_update", onMetricsUpdate);
+            socket.on("capteurs_update", onCapteursUpdate);
+            socket.on("vehicle_update", onVehicleUpdate);
+            socket.on("intervention_update", onInterventionUpdate);
+            socket.on("status_change", onStatusChange);
         }
-    }, [socket]);
 
-    // Gestion des alertes entrantes
+        return () => {
+            clearInterval(dashboardTimer);
+            if (socket) {
+                socket.off("metrics_update", onMetricsUpdate);
+                socket.off("capteurs_update", onCapteursUpdate);
+                socket.off("vehicle_update", onVehicleUpdate);
+                socket.off("intervention_update", onInterventionUpdate);
+                socket.off("status_change", onStatusChange);
+            }
+        };
+    }, [socket, fetchGlobal, applyStats, applyCapteursToDashboard, applyVehiculesToDashboard, applyInterventionsToDashboard]);
+
     useEffect(() => {
         if (lastAlert) {
             setShowNotification(lastAlert);
@@ -66,77 +155,65 @@ function AppContent() {
     }, [lastAlert]);
 
     const renderPage = () => {
-        const props = { apiBase: API_BASE, globalStats };
+        const props = { apiBase: API_BASE, api: API_BASE, globalStats };
+
         switch (activePage) {
-            case 'dashboard': return <Accueil {...props} />;
-            case 'capteurs': return <Capteurs {...props} />;
-            case 'interventions': return <Interventions {...props} />;
-            case 'air': return <QualiteAir {...props} />;
-            case 'compiler': return <Compilateur {...props} />;
-            case 'lab': return <LabCompilation {...props} />;
-            case 'reports': return <Rapports {...props} />;
-            case 'automates': return <Automates {...props} />;
-            case 'map': return <CarteUrbaine {...props} />;
-            case 'chat': return <ChatIA {...props} />;
-            case 'stats': return <Statistiques {...props} />;
-            case 'vehicules': return <Vehicules {...props} />;
-            default: return <Accueil {...props} />;
+            case 'dashboard':
+                return <Accueil {...props} />;
+            case 'capteurs':
+                return <Capteurs {...props} />;
+            case 'vehicules':
+                return <Vehicules {...props} />;
+            case 'interventions':
+                return <Interventions {...props} />;
+            case 'air':
+                return <QualiteAir {...props} />;
+            case 'compiler':
+                return <Compilateur {...props} />;
+            case 'reports':
+                return <Rapports {...props} />;
+            case 'automates':
+                return <Automates {...props} />;
+            case 'map':
+                return <CarteUrbaine {...props} />;
+            case 'chat':
+                return <ChatIA {...props} />;
+            case 'stats':
+                return <Statistiques {...props} />;
+            default:
+                return <Accueil {...props} />;
         }
     };
 
     return (
-        <div className="flex h-screen bg-[#0f111a] text-slate-200 overflow-hidden font-sans relative">
-            {/* Notification Toast */}
-            <AnimatePresence>
-                {showNotification && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 100 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 100 }}
-                        className="fixed top-6 right-6 z-[100] bg-red-900/40 backdrop-blur-xl border border-red-500/50 p-4 rounded-xl shadow-2xl flex items-center gap-4 min-w-[300px]"
-                    >
-                        <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500">
-                            <span className="text-xl">⚠️</span>
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-red-400 capitalize">{showNotification.type}</h4>
-                            <p className="text-sm text-red-100">{showNotification.message}</p>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
+        <div className="min-h-screen bg-[#0f111a] text-white">
             <Sidebar
                 activePage={activePage}
                 setActivePage={setActivePage}
                 alertsCount={alertsCount}
-                vehiculesPanne={globalStats?.vehicules?.en_panne || 0}
+                vehiculesPanne={vehiculesPanne}
             />
 
-            <main className="flex-1 ml-64 overflow-y-auto relative h-full">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/5 blur-[120px] -z-10 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-600/5 blur-[100px] -z-10 pointer-events-none" />
-
-                <div className="p-8 max-w-[1600px] mx-auto min-h-full flex flex-col">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={activePage}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.2 }}
-                            className="flex-1"
-                        >
-                            {renderPage()}
-                        </motion.div>
-                    </AnimatePresence>
-
-                    <footer className="mt-auto pt-10 pb-4 border-t border-gray-800/30 flex justify-between items-center text-[10px] text-gray-500 uppercase tracking-widest">
-                        <p>© 2030 Neo-Sousse Smart City Platform</p>
-                        <p>Connecté au cluster central-01 | Real-time Active</p>
-                    </footer>
-                </div>
+            <main className="ml-64 min-h-screen p-8">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={activePage}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -12 }}
+                        transition={{ duration: 0.25 }}
+                    >
+                        {renderPage()}
+                    </motion.div>
+                </AnimatePresence>
             </main>
+
+            {showNotification && (
+                <div className="fixed top-6 right-6 z-[9999] max-w-sm rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-red-100 shadow-2xl backdrop-blur-xl">
+                    <p className="text-sm font-black uppercase tracking-widest">Alerte</p>
+                    <p className="mt-1 text-sm">{showNotification.message}</p>
+                </div>
+            )}
         </div>
     );
 }
@@ -147,4 +224,4 @@ export default function App() {
             <AppContent />
         </SocketProvider>
     );
-}
+}

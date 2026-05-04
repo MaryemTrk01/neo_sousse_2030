@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Car, RefreshCw, Wifi, AlertTriangle, MapPin, Activity, Navigation } from 'lucide-react';
+import { useSocket } from '../SocketContext';
 
 // ── Zones de la carte ──
 const ZONES = [
@@ -53,6 +54,7 @@ export default function Vehicules({ apiBase }) {
     const [tick, setTick] = useState(0);
     const animRef = useRef(null);
     const pollRef = useRef(null);
+    const { socket, connected } = useSocket();
 
     // ── Fetch véhicules ──
     const fetchVehicules = useCallback(async () => {
@@ -128,11 +130,60 @@ export default function Vehicules({ apiBase }) {
 
     useEffect(() => { fetchVehicules(); }, [fetchVehicules]);
 
-    // Polling 5s
+    // Rafraichissement de secours chaque minute. Les changements arrivent d'abord par Socket.IO.
     useEffect(() => {
-        pollRef.current = setInterval(fetchVehicules, 5000);
+        pollRef.current = setInterval(fetchVehicules, 60000);
         return () => clearInterval(pollRef.current);
     }, [fetchVehicules]);
+
+    useEffect(() => {
+        if (!socket) return;
+
+        const onVehicleUpdate = (data) => {
+            if (!Array.isArray(data)) {
+                fetchVehicules();
+                return;
+            }
+
+            setVehicules(data);
+            setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
+            setLoading(false);
+
+            setSelected(prev => {
+                if (!prev) return prev;
+                return data.find(v => v.id === prev.id) || null;
+            });
+
+            setPositions(prev => {
+                const next = { ...prev };
+                data.forEach(v => {
+                    if (!next[v.id]) {
+                        const zoneKey = ZONE_KEYS[v.id % ZONE_KEYS.length];
+                        const pos = randInZone(zoneKey);
+                        next[v.id] = { x: pos.x, y: pos.y };
+                    }
+                });
+                return next;
+            });
+
+            setTargets(prev => {
+                const next = { ...prev };
+                data.forEach(v => {
+                    if (v.statut === 'EN_ROUTE' && !next[v.id]) {
+                        const zoneKey = ZONE_KEYS[(v.id * 3) % ZONE_KEYS.length];
+                        next[v.id] = randInZone(zoneKey);
+                    }
+                    if (v.statut !== 'EN_ROUTE') {
+                        delete next[v.id];
+                    }
+                });
+                return next;
+            });
+        };
+
+        socket.on('vehicle_update', onVehicleUpdate);
+        return () => socket.off('vehicle_update', onVehicleUpdate);
+    }, [socket, fetchVehicules]);
 
     // Animation 80ms
     useEffect(() => {
@@ -169,7 +220,7 @@ export default function Vehicules({ apiBase }) {
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-                        <Wifi className="w-3 h-3 animate-pulse" /> Live
+                        <Wifi className="w-3 h-3 animate-pulse" /> {connected ? 'Live Socket' : 'Hors ligne'}
                     </div>
                     <button onClick={fetchVehicules}
                         className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
