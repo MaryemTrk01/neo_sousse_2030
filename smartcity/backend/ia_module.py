@@ -31,7 +31,7 @@ from db_config import get_cursor, get_connection
 
 # ── Configuration Ollama (Local) ──
 OLLAMA_URL   = "http://localhost:11434/api/chat"
-OLLAMA_MODEL = "llama3.2" 
+OLLAMA_MODEL = "qwen2.5-coder:7b"
 
 
 # ══════════════════════════════════════════════════════════════
