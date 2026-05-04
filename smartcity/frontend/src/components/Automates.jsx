@@ -135,6 +135,7 @@ export default function Automates({ apiBase }) {
     const [selectedEntity, setSelectedEntity] = useState(null);
     const [filterText, setFilterText] = useState('');
     const [filterState, setFilterState] = useState('ALL');
+    const [stateMenuOpen, setStateMenuOpen] = useState(false);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [validation, setValidation] = useState(null);
@@ -166,6 +167,7 @@ export default function Automates({ apiBase }) {
         setValidation(null);
         setFilterText('');
         setFilterState('ALL');
+        setStateMenuOpen(false);
         fetchEntities(true);
     }, [selectedFsm]);
 
@@ -224,6 +226,15 @@ export default function Automates({ apiBase }) {
             behavior: 'smooth',
         });
     };
+
+    const stateOptions = useMemo(() => (
+        [{ value: 'ALL', label: 'Tous les etats' }, ...currentDef.states.map((state) => ({
+            value: state,
+            label: formatState(state),
+        }))]
+    ), [currentDef.states]);
+
+    const selectedStateLabel = stateOptions.find((option) => option.value === filterState)?.label || 'Tous les etats';
 
     const handleTransition = async (trigger, nextState) => {
         if (!selectedEntity) return;
@@ -324,17 +335,39 @@ export default function Automates({ apiBase }) {
                             />
                         </div>
                         <div className="relative">
-                            <select
-                                value={filterState}
-                                onChange={(event) => setFilterState(event.target.value)}
-                                className="h-12 min-w-[230px] appearance-none rounded-xl border border-white/10 bg-white/[0.04] px-4 pr-11 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors [color-scheme:dark] focus:border-turquoise/50 focus:bg-turquoise/[0.05]"
+                            <button
+                                type="button"
+                                onClick={() => setStateMenuOpen((open) => !open)}
+                                onBlur={() => window.setTimeout(() => setStateMenuOpen(false), 120)}
+                                className="h-12 min-w-[230px] rounded-xl border border-white/10 bg-white/[0.04] px-4 pr-11 text-left text-xs font-black uppercase tracking-widest text-white outline-none transition-colors focus:border-turquoise/50 focus:bg-turquoise/[0.05]"
                             >
-                                <option className="bg-bg-deep text-white" value="ALL">Tous les etats</option>
-                                {currentDef.states.map((state) => (
-                                    <option className="bg-bg-deep text-white" key={state} value={state}>{formatState(state)}</option>
-                                ))}
-                            </select>
+                                {selectedStateLabel}
+                            </button>
                             <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/70" />
+                            {stateMenuOpen && (
+                                <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-xl border border-white/10 bg-bg-deep shadow-2xl shadow-black/50">
+                                    {stateOptions.map((option) => {
+                                        const active = option.value === filterState;
+                                        return (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() => {
+                                                    setFilterState(option.value);
+                                                    setStateMenuOpen(false);
+                                                }}
+                                                className={`block w-full px-4 py-3 text-left text-xs font-black uppercase tracking-widest transition-colors ${active
+                                                    ? 'bg-turquoise text-black'
+                                                    : 'bg-bg-deep text-white hover:bg-white/[0.06]'
+                                                    }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                         <button
                             onClick={() => scrollEntities(-1)}
