@@ -1,105 +1,201 @@
-# 🏙️ Smart City Neo-Sousse 2030
-## Projet de Théorie des Langages et Compilation — Section IA 2
+# Neo Sousse 2030
 
----
+Application Smart City pour le suivi des capteurs, interventions, vehicules, mesures urbaines, automates d'etats, rapports IA et compilation de requetes en SQL.
 
-## 📁 Structure du Projet
+## Fonctionnalites
 
-```
+- Dashboard avec KPIs de la ville en temps reel.
+- Pages Capteurs, Interventions et Vehicules avec etats synchronises.
+- Automates interactifs pour les transitions d'etats.
+- Carte urbaine et visualisation des donnees de qualite d'air.
+- Statistiques et graphiques avec Recharts.
+- Chat IA, rapports et suggestions.
+- Compilateur de langage naturel vers SQL.
+- Backend Flask avec REST API et Socket.IO.
+- Synchronisation des donnees par Socket.IO plus refresh API toutes les 60 secondes.
+
+## Architecture
+
+```text
 smartcity/
-├── backend/
-│   ├── app.py              # Serveur Flask REST API (port 5000)
-│   └── ia_module.py         # Module IA Générative (Google Gemini)
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx          # Dashboard principal
-│   │   └── components/
-│   │       ├── Sidebar.jsx   # Navigation latérale
-│   │       ├── Overview.jsx  # KPIs temps réel
-│   │       ├── Compiler.jsx  # Compilateur NL → SQL
-│   │       ├── Automates.jsx # Automates finis interactifs
-│   │       ├── Reports.jsx   # Rapports IA & Chat ARIA
-│   │       └── Charts.jsx    # Graphiques Recharts
-│   └── package.json
-├── compilateur/              # Compilateur NL → SQL existant
-├── automates/                # Automates existants (transitions)
-├── bdd/
-│   └── db_config.py         # Configuration PostgreSQL
-└── README.md
+|-- backend/              # API Flask + Socket.IO
+|   |-- app.py            # Serveur principal
+|   `-- ia_module.py      # Collecte des donnees et logique IA
+|-- frontend/             # Application React + Vite
+|   |-- src/
+|   |   |-- App.jsx
+|   |   |-- SocketContext.jsx
+|   |   `-- components/
+|   `-- package.json
+|-- bdd/                  # Configuration et scripts SQL
+|-- compilateur/          # Lexer, parser, semantic, codegen
+|-- automates/            # Automates Python
+|-- db/                   # Modules base de donnees et IA
+`-- README.md
 ```
 
----
+## Prerequis
 
-## 🚀 Instructions de Lancement
+- Python 3.10 ou plus recent
+- Node.js 18 ou plus recent
+- PostgreSQL
+- Base de donnees `smartcity`
 
-### Prérequis
-- **Python 3.8+** avec pip
-- **Node.js 18+** avec npm
-- **PostgreSQL** démarré sur le port `5433` (base `smartcity`)
+Configuration actuelle de la base dans `bdd/db_config.py` :
 
-### 1. Installer les dépendances Python
-```bash
-pip install flask flask-cors psycopg2-binary transitions
+```text
+host: localhost
+port: 5433
+database: smartcity
+user: postgres
 ```
 
-### 2. Lancer le serveur Backend (Flask)
-```bash
-cd smartcity/backend
-python app.py
-```
-Le serveur démarre sur **http://localhost:5000**
+Le mot de passe est configure localement dans `bdd/db_config.py`. Pour un depot public, il est recommande de le remplacer par une variable d'environnement.
 
-### 3. Installer les dépendances Frontend
+## Installation
+
+Depuis le dossier `smartcity` :
+
 ```bash
-cd smartcity/frontend
+pip install flask flask-cors flask-socketio psycopg2-binary transitions eventlet
+```
+
+Puis installer le frontend :
+
+```bash
+cd frontend
 npm install
 ```
 
-### 4. Lancer le Dashboard React
+## Lancement
+
+Ouvrir un premier terminal pour le backend :
+
+```bash
+cd smartcity
+python backend/app.py
+```
+
+Le backend demarre sur :
+
+```text
+http://localhost:5000
+```
+
+Ouvrir un deuxieme terminal pour le frontend :
+
 ```bash
 cd smartcity/frontend
 npm run dev
 ```
-Le dashboard est accessible sur **http://localhost:3000**
 
----
+Le frontend demarre sur :
 
-## 📡 Endpoints API
+```text
+http://localhost:3000
+```
 
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/rapport` | Rapport journalier IA |
-| GET | `/suggestions` | Suggestions d'actions |
-| GET | `/stats` | KPIs en JSON |
-| GET | `/mesures` | Données des mesures |
-| GET | `/citoyens` | Liste des citoyens |
-| GET | `/automates/etat` | État des automates |
-| POST | `/valider-transition` | Validation IA d'une transition |
-| POST | `/chat` | Chat avec ARIA |
-| POST | `/compiler` | Compilateur NL → SQL |
-| POST | `/automates/transition` | Déclencher une transition |
+## Temps reel
 
----
+Le backend envoie les evenements Socket.IO suivants :
 
-## ⚙️ Configuration
+```text
+metrics_update
+capteurs_update
+measures_update
+vehicle_update
+intervention_update
+status_change
+alert
+```
 
-| Paramètre | Valeur |
-|-----------|--------|
-| PostgreSQL Host | localhost |
-| PostgreSQL Port | 5433 |
-| Base de données | smartcity |
-| User | postgres |
-| Password | salma123456 |
-| Flask Port | 5000 |
-| React Port | 3000 |
-| API IA | Google Gemini (gratuit) |
+Le moteur automatique backend tourne toutes les 60 secondes. A chaque cycle, il peut modifier les etats des capteurs, interventions et vehicules, puis envoyer les nouvelles valeurs au frontend.
 
----
+Exemple de logs backend :
 
-## 🧠 Technologies
+```text
+[WORKER] Heartbeat - 15:49:06
+[AUTO] capteur #24: ACTIF -> SIGNALE via signaler
+[AUTO] vehicule #10: STATIONNE -> EN_ROUTE via auto_vehicle_flow
+[SOCKET] emit_all_updates 15:49:06
+[FRONTEND] dashboard: capteurs_actifs=30, capteurs_signales=34, capteurs_hs=2, interventions_en_cours=0, interventions_terminees=200, vehicules_en_route=50, vehicules_en_panne=2
+[FRONTEND] socket lists: capteurs_update=100 items, measures_update=50 items, vehicle_update=150 items, intervention_update=200 items
+```
 
-- **Backend** : Python, Flask, psycopg2, Google Gemini API
-- **Frontend** : React 18, Vite, TailwindCSS, Recharts, React Flow
-- **Base de données** : PostgreSQL
-- **Automates** : Library `transitions` (Python)
-- **Compilateur** : Lexer → Parser → Sémantique → CodeGen (NL → SQL)
+Les pages frontend utilisent Socket.IO et relisent aussi leurs API toutes les 60 secondes pour garder les dernieres valeurs.
+
+## API principales
+
+| Methode | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/api/dashboard` | KPIs globaux du dashboard |
+| GET | `/api/capteurs` | Liste des capteurs |
+| POST | `/api/capteurs/<id>/transition` | Transition d'un capteur |
+| GET | `/api/interventions` | Liste des interventions |
+| POST | `/api/interventions/<id>/transition` | Transition d'une intervention |
+| GET | `/api/vehicules` | Liste des vehicules |
+| POST | `/api/vehicules/<id>/transition` | Transition d'un vehicule |
+| GET | `/api/mesures` | Mesures des capteurs |
+| GET | `/api/citoyens` | Liste des citoyens |
+| GET | `/api/rapport` | Rapport IA |
+| GET | `/api/suggestions` | Suggestions IA |
+| POST | `/api/chat` | Chat IA |
+| POST | `/api/compiler` | Compilation langage naturel vers SQL |
+| GET | `/api/realtime/status` | Statut du moteur temps reel |
+| POST | `/api/simulate/start` | Demarrer la simulation |
+| POST | `/api/simulate/stop` | Arreter la simulation |
+
+## Transitions automatiques
+
+Capteurs :
+
+```text
+INACTIF -> ACTIF
+ACTIF -> SIGNALE
+SIGNALE -> EN_MAINTENANCE
+EN_MAINTENANCE -> ACTIF
+EN_MAINTENANCE -> HORS_SERVICE
+HORS_SERVICE -> INACTIF
+```
+
+Interventions :
+
+```text
+DEMANDE -> TECH1_ASSIGNE
+TECH1_ASSIGNE -> TECH2_VALIDE
+TECH2_VALIDE -> IA_VALIDE
+IA_VALIDE -> TERMINE
+```
+
+Vehicules :
+
+```text
+STATIONNE -> EN_ROUTE
+EN_ROUTE -> ARRIVE
+EN_ROUTE -> EN_PANNE
+ARRIVE -> STATIONNE
+EN_PANNE -> STATIONNE
+```
+
+## Verification
+
+Compiler le frontend :
+
+```bash
+cd frontend
+npm run build
+```
+
+Verifier le backend :
+
+```bash
+python -m py_compile backend/app.py
+```
+
+## Technologies
+
+- Backend : Flask, Flask-SocketIO, psycopg2, Python
+- Frontend : React 18, Vite, Tailwind CSS, Recharts, React Flow, Leaflet
+- Base de donnees : PostgreSQL
+- Temps reel : Socket.IO
+- Compilation : lexer, parser, analyse semantique, generation SQL
