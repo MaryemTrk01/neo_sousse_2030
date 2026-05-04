@@ -325,11 +325,11 @@ export default function Automates({ apiBase }) {
                         <select
                             value={filterState}
                             onChange={(event) => setFilterState(event.target.value)}
-                            className="h-12 min-w-[210px] rounded-xl border border-white/10 bg-bg-deep px-4 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors focus:border-turquoise/50"
+                            className="h-12 min-w-[210px] rounded-xl border border-white/10 bg-bg-deep px-4 text-xs font-black uppercase tracking-widest text-white outline-none transition-colors [color-scheme:dark] focus:border-turquoise/50"
                         >
-                            <option value="ALL">Tous les etats</option>
+                            <option className="bg-bg-deep text-white" value="ALL">Tous les etats</option>
                             {currentDef.states.map((state) => (
-                                <option key={state} value={state}>{formatState(state)}</option>
+                                <option className="bg-bg-deep text-white" key={state} value={state}>{formatState(state)}</option>
                             ))}
                         </select>
                         <button
