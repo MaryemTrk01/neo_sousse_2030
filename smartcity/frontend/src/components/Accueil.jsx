@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
     Cpu,
@@ -8,6 +8,7 @@ import {
     ArrowUpRight,
     ShieldCheck,
     BarChart3,
+    Clock,
 } from 'lucide-react';
 import {
     AreaChart,
@@ -86,6 +87,31 @@ const getEcoScoreShadow = (score) => {
     return '0 0 18px rgba(239, 68, 68, 0.55)';
 };
 
+const buildMesuresByType = (mesures = []) => {
+    const grouped = {};
+
+    mesures.forEach((item) => {
+        const type = item.type_mesure || item.type || 'inconnu';
+        const value = Number(item.valeur);
+
+        if (!Number.isFinite(value)) return;
+
+        if (!grouped[type]) {
+            grouped[type] = { total: 0, count: 0 };
+        }
+
+        grouped[type].total += value;
+        grouped[type].count += 1;
+    });
+
+    return Object.entries(grouped)
+        .map(([type_mesure, data]) => ({
+            type_mesure,
+            moyenne: Number((data.total / data.count).toFixed(2)),
+        }))
+        .sort((a, b) => a.type_mesure.localeCompare(b.type_mesure));
+};
+
 const StatCard = ({ label, value, icon: Icon, color, subValue, trend }) => (
     <motion.div
         whileHover={{ y: -5, scale: 1.02 }}
@@ -144,8 +170,46 @@ const StatCard = ({ label, value, icon: Icon, color, subValue, trend }) => (
 );
 
 export default function Accueil({ globalStats }) {
-    const { connected } = useSocket();
+    const { socket, connected } = useSocket();
+    const [currentTime, setCurrentTime] = useState(
+        new Date().toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        })
+    );
+    const [liveMesuresByType, setLiveMesuresByType] = useState([]);
     const liveStats = globalStats;
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentTime(
+                new Date().toLocaleTimeString('fr-FR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                })
+            );
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        setLiveMesuresByType(globalStats?.mesures_by_type || []);
+    }, [globalStats?.mesures_by_type]);
+
+    useEffect(() => {
+        if (!socket) return undefined;
+
+        const onMeasuresUpdate = (mesures) => {
+            if (!Array.isArray(mesures)) return;
+            setLiveMesuresByType(buildMesuresByType(mesures));
+        };
+
+        socket.on('measures_update', onMeasuresUpdate);
+        return () => socket.off('measures_update', onMeasuresUpdate);
+    }, [socket]);
 
     if (!liveStats) {
         return (
@@ -161,7 +225,9 @@ export default function Accueil({ globalStats }) {
     }
 
     const chartData = liveStats.measure_chart_data || [];
-    const mesuresByType = liveStats.mesures_by_type || [];
+    const mesuresByType = liveMesuresByType.length > 0
+        ? liveMesuresByType
+        : liveStats.mesures_by_type || [];
 
     const anomalies =
         (liveStats.capteurs_hs || 0) +
@@ -258,8 +324,17 @@ export default function Accueil({ globalStats }) {
                     </div>
                 </div>
 
-                <div className="px-6 py-3 neo-glass rounded-2xl border border-white/5 text-[10px] font-black text-white uppercase tracking-widest">
-                    {connected ? 'Socket connecté' : 'Sync 60s'}
+                <div className="flex items-center gap-3">
+                    <div className="neo-glass flex items-center gap-3 rounded-2xl border border-white/5 px-5 py-3">
+                        <Clock className="h-4 w-4 text-purple-300" />
+                        <span className="font-mono text-sm font-black text-white">
+                            {currentTime}
+                        </span>
+                    </div>
+
+                    <div className="px-6 py-3 neo-glass rounded-2xl border border-white/5 text-[10px] font-black text-white uppercase tracking-widest">
+                        {connected ? 'Socket connecté' : 'Sync 60s'}
+                    </div>
                 </div>
             </header>
 
@@ -407,7 +482,7 @@ export default function Accueil({ globalStats }) {
                                 </h3>
 
                                 <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
-                                    Moyenne 24h
+                                    Live socket
                                 </p>
                             </div>
                         </div>

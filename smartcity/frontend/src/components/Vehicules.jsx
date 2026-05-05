@@ -1,52 +1,148 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Car, RefreshCw, Wifi, AlertTriangle, MapPin, Activity, Navigation } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    Activity,
+    AlertTriangle,
+    Bus,
+    Car,
+    CheckCircle2,
+    MapPin,
+    Navigation,
+    ParkingCircle,
+    RefreshCw,
+    Route,
+    Truck,
+    Wrench,
+    X,
+} from 'lucide-react';
 import { useSocket } from '../SocketContext';
 
-// ── Zones de la carte ──
 const ZONES = [
-    { id: 'centre', label: 'Centre', x: 35, y: 35, w: 30, h: 30, color: '#1e40af' },
-    { id: 'nord', label: 'Nord', x: 15, y: 5, w: 70, h: 28, color: '#065f46' },
-    { id: 'sud', label: 'Sud', x: 15, y: 67, w: 70, h: 28, color: '#065f46' },
-    { id: 'est', label: 'Est', x: 70, y: 30, w: 25, h: 38, color: '#1e3a5f' },
-    { id: 'ouest', label: 'Ouest', x: 5, y: 30, w: 25, h: 38, color: '#1e3a5f' },
-    { id: 'port', label: 'Port', x: 78, y: 5, w: 17, h: 22, color: '#164e63' },
-    { id: 'medina', label: 'Médina', x: 5, y: 5, w: 17, h: 22, color: '#3b1f5e' },
-    { id: 'corniche', label: 'Corniche', x: 78, y: 72, w: 17, h: 23, color: '#164e63' },
+    { id: 'centre', label: 'Centre', x: 35, y: 35, w: 30, h: 30, color: '#6d28d9' },
+    { id: 'nord', label: 'Nord', x: 15, y: 5, w: 70, h: 28, color: '#0f766e' },
+    { id: 'sud', label: 'Sud', x: 15, y: 67, w: 70, h: 28, color: '#0f766e' },
+    { id: 'est', label: 'Est', x: 70, y: 30, w: 25, h: 38, color: '#0369a1' },
+    { id: 'ouest', label: 'Ouest', x: 5, y: 30, w: 25, h: 38, color: '#0369a1' },
+    { id: 'port', label: 'Port', x: 78, y: 5, w: 17, h: 22, color: '#0891b2' },
+    { id: 'medina', label: 'Medina', x: 5, y: 5, w: 17, h: 22, color: '#be185d' },
+    { id: 'corniche', label: 'Corniche', x: 78, y: 72, w: 17, h: 23, color: '#0891b2' },
 ];
 
-// Centre de chaque zone
 const ZONE_CENTERS = {};
-ZONES.forEach(z => {
-    ZONE_CENTERS[z.id] = { x: z.x + z.w / 2, y: z.y + z.h / 2 };
+ZONES.forEach((zone) => {
+    ZONE_CENTERS[zone.id] = { x: zone.x + zone.w / 2, y: zone.y + zone.h / 2 };
 });
 const ZONE_KEYS = Object.keys(ZONE_CENTERS);
 
-// Couleurs selon statut
-const STATUT_COLOR = {
-    EN_ROUTE: { bg: '#10b981', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-    EN_PANNE: { bg: '#ef4444', text: 'text-red-400', badge: 'bg-red-500/20 text-red-400 border-red-500/30' },
-    STATIONNE: { bg: '#6b7280', text: 'text-gray-400', badge: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
-    ARRIVE: { bg: '#3b82f6', text: 'text-blue-400', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+const STATUS_CONFIG = {
+    EN_ROUTE: {
+        label: 'En route',
+        color: '#10b981',
+        icon: Navigation,
+        card: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300',
+        badge: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300',
+    },
+    EN_PANNE: {
+        label: 'En panne',
+        color: '#ef4444',
+        icon: AlertTriangle,
+        card: 'border-rose-400/20 bg-rose-400/10 text-rose-300',
+        badge: 'border-rose-400/25 bg-rose-400/10 text-rose-300',
+    },
+    STATIONNE: {
+        label: 'Stationne',
+        color: '#94a3b8',
+        icon: ParkingCircle,
+        card: 'border-slate-400/20 bg-slate-400/10 text-slate-300',
+        badge: 'border-slate-400/25 bg-slate-400/10 text-slate-300',
+    },
+    ARRIVE: {
+        label: 'Arrive',
+        color: '#60a5fa',
+        icon: CheckCircle2,
+        card: 'border-sky-400/20 bg-sky-400/10 text-sky-300',
+        badge: 'border-sky-400/25 bg-sky-400/10 text-sky-300',
+    },
 };
 
-const TYPE_ICON = { bus: '🚌', voiture: '🚗', camion: '🚛', moto: '🛵', scooter: '🛴' };
-const TYPE_EMOJI = (t) => TYPE_ICON[t] || '🚗';
+const TYPE_ICON = {
+    bus: Bus,
+    camion: Truck,
+    voiture: Car,
+    moto: Route,
+    scooter: Route,
+};
 
-// Génère une position initiale aléatoire dans une zone
 const randInZone = (zoneId) => {
-    const z = ZONES.find(z => z.id === zoneId) || ZONES[0];
+    const zone = ZONES.find((item) => item.id === zoneId) || ZONES[0];
     return {
-        x: z.x + 2 + Math.random() * (z.w - 4),
-        y: z.y + 2 + Math.random() * (z.h - 4),
+        x: zone.x + 2 + Math.random() * (zone.w - 4),
+        y: zone.y + 2 + Math.random() * (zone.h - 4),
     };
+};
+
+const getVehicleIcon = (type) => TYPE_ICON[type] || Car;
+
+const KpiGauge = ({ value, label, icon: Icon, color, active, onClick }) => {
+    const radius = 42;
+    const circumference = 2 * Math.PI * radius;
+    const progress = Math.max(8, Math.min(100, value));
+    const dashOffset = circumference - (progress / 100) * circumference;
+
+    return (
+        <button
+            onClick={onClick}
+            style={{ height: 158 }}
+            className={`group flex min-w-0 flex-col items-center justify-center rounded-3xl border bg-[#0d1424] px-4 py-4 text-center shadow-[0_14px_42px_rgba(0,0,0,0.28)] transition hover:-translate-y-1 hover:border-white/20 ${
+                active ? 'border-white/25 ring-2 ring-white/10' : 'border-white/10'
+            }`}
+        >
+            <div className="relative" style={{ width: 76, height: 76 }}>
+                <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+                    <circle
+                        cx="60"
+                        cy="60"
+                        r={radius}
+                        fill="none"
+                        stroke="rgba(255,255,255,0.06)"
+                        strokeWidth="12"
+                    />
+                    <circle
+                        cx="60"
+                        cy="60"
+                        r={radius}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={dashOffset}
+                        className="transition-all duration-500"
+                        style={{ filter: `drop-shadow(0 0 14px ${color}66)` }}
+                    />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.045]" style={{ color }}>
+                        <Icon className="h-5 w-5" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-2 text-2xl font-black leading-none text-white">
+                {value}
+            </div>
+            <div className="mt-2 max-w-full truncate text-[10px] font-black uppercase tracking-[0.12em] text-white">
+                {label}
+            </div>
+        </button>
+    );
 };
 
 export default function Vehicules({ apiBase }) {
     const [vehicules, setVehicules] = useState([]);
-    const [positions, setPositions] = useState({});   // positions animées
-    const [targets, setTargets] = useState({});   // cibles de déplacement
+    const [positions, setPositions] = useState({});
+    const [targets, setTargets] = useState({});
     const [selected, setSelected] = useState(null);
     const [filter, setFilter] = useState('tous');
     const [loading, setLoading] = useState(true);
@@ -56,439 +152,500 @@ export default function Vehicules({ apiBase }) {
     const pollRef = useRef(null);
     const { socket, connected } = useSocket();
 
-    // ── Fetch véhicules ──
+    const applyVehicules = useCallback((data) => {
+        setVehicules(data);
+        setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
+        setLoading(false);
+
+        setSelected((prev) => {
+            if (!prev) return prev;
+            return data.find((vehicle) => vehicle.id === prev.id) || null;
+        });
+
+        setPositions((prev) => {
+            const next = { ...prev };
+            data.forEach((vehicle) => {
+                if (!next[vehicle.id]) {
+                    next[vehicle.id] = randInZone(ZONE_KEYS[vehicle.id % ZONE_KEYS.length]);
+                }
+            });
+            return next;
+        });
+
+        setTargets((prev) => {
+            const next = { ...prev };
+            data.forEach((vehicle) => {
+                if (vehicle.statut === 'EN_ROUTE' && !next[vehicle.id]) {
+                    next[vehicle.id] = randInZone(ZONE_KEYS[(vehicle.id * 3) % ZONE_KEYS.length]);
+                }
+                if (vehicle.statut !== 'EN_ROUTE') {
+                    delete next[vehicle.id];
+                }
+            });
+            return next;
+        });
+    }, []);
+
     const fetchVehicules = useCallback(async () => {
         try {
             const res = await axios.get(`${apiBase}/vehicules`);
-            const vehs = res.data.vehicules || [];
-            setVehicules(vehs);
-            setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
-
-            // Initialiser positions pour nouveaux véhicules
-            setPositions(prev => {
-                const next = { ...prev };
-                vehs.forEach(v => {
-                    if (!next[v.id]) {
-                        const zoneKey = ZONE_KEYS[v.id % ZONE_KEYS.length];
-                        const pos = randInZone(zoneKey);
-                        next[v.id] = { x: pos.x, y: pos.y };
-                    }
-                });
-                return next;
-            });
-            setTargets(prev => {
-                const next = { ...prev };
-                vehs.forEach(v => {
-                    if (!next[v.id] && v.statut === 'EN_ROUTE') {
-                        const zoneKey = ZONE_KEYS[(v.id * 3) % ZONE_KEYS.length];
-                        next[v.id] = randInZone(zoneKey);
-                    }
-                });
-                return next;
-            });
+            applyVehicules(res.data.vehicules || []);
         } catch (err) {
             console.error('Vehicules fetch error:', err);
-        } finally {
             setLoading(false);
         }
-    }, [apiBase]);
+    }, [apiBase, applyVehicules]);
 
-    // ── Animation mouvement ──
     const animateStep = useCallback(() => {
-        setPositions(prev => {
+        setPositions((prev) => {
             const next = { ...prev };
-            setTargets(prevT => {
-                const nextT = { ...prevT };
-                vehicules.forEach(v => {
-                    if (v.statut !== 'EN_ROUTE') return;
-                    const pos = next[v.id];
-                    const tgt = nextT[v.id];
-                    if (!pos || !tgt) return;
+            setTargets((prevTargets) => {
+                const nextTargets = { ...prevTargets };
 
-                    const dx = tgt.x - pos.x;
-                    const dy = tgt.y - pos.y;
+                vehicules.forEach((vehicle) => {
+                    if (vehicle.statut !== 'EN_ROUTE') return;
+
+                    const pos = next[vehicle.id];
+                    const target = nextTargets[vehicle.id];
+                    if (!pos || !target) return;
+
+                    const dx = target.x - pos.x;
+                    const dy = target.y - pos.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
                     if (dist < 0.8) {
-                        // Nouvelle cible aléatoire
-                        const zoneKey = ZONE_KEYS[Math.floor(Math.random() * ZONE_KEYS.length)];
-                        nextT[v.id] = randInZone(zoneKey);
+                        nextTargets[vehicle.id] = randInZone(ZONE_KEYS[Math.floor(Math.random() * ZONE_KEYS.length)]);
                     } else {
                         const speed = 0.25 + Math.random() * 0.1;
-                        next[v.id] = {
+                        next[vehicle.id] = {
                             x: pos.x + (dx / dist) * speed,
                             y: pos.y + (dy / dist) * speed,
                         };
                     }
                 });
-                return nextT;
+
+                return nextTargets;
             });
             return next;
         });
-        setTick(t => t + 1);
+        setTick((value) => value + 1);
     }, [vehicules]);
 
-    useEffect(() => { fetchVehicules(); }, [fetchVehicules]);
+    useEffect(() => {
+        fetchVehicules();
+    }, [fetchVehicules]);
 
-    // Rafraichissement de secours chaque minute. Les changements arrivent d'abord par Socket.IO.
     useEffect(() => {
         pollRef.current = setInterval(fetchVehicules, 60000);
         return () => clearInterval(pollRef.current);
     }, [fetchVehicules]);
 
     useEffect(() => {
-        if (!socket) return;
+        if (!socket) return undefined;
 
         const onVehicleUpdate = (data) => {
-            if (!Array.isArray(data)) {
-                fetchVehicules();
+            if (Array.isArray(data)) {
+                applyVehicules(data);
                 return;
             }
-
-            setVehicules(data);
-            setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
-            setLoading(false);
-
-            setSelected(prev => {
-                if (!prev) return prev;
-                return data.find(v => v.id === prev.id) || null;
-            });
-
-            setPositions(prev => {
-                const next = { ...prev };
-                data.forEach(v => {
-                    if (!next[v.id]) {
-                        const zoneKey = ZONE_KEYS[v.id % ZONE_KEYS.length];
-                        const pos = randInZone(zoneKey);
-                        next[v.id] = { x: pos.x, y: pos.y };
-                    }
-                });
-                return next;
-            });
-
-            setTargets(prev => {
-                const next = { ...prev };
-                data.forEach(v => {
-                    if (v.statut === 'EN_ROUTE' && !next[v.id]) {
-                        const zoneKey = ZONE_KEYS[(v.id * 3) % ZONE_KEYS.length];
-                        next[v.id] = randInZone(zoneKey);
-                    }
-                    if (v.statut !== 'EN_ROUTE') {
-                        delete next[v.id];
-                    }
-                });
-                return next;
-            });
+            fetchVehicules();
         };
 
         socket.on('vehicle_update', onVehicleUpdate);
         return () => socket.off('vehicle_update', onVehicleUpdate);
-    }, [socket, fetchVehicules]);
+    }, [socket, fetchVehicules, applyVehicules]);
 
-    // Animation 80ms
     useEffect(() => {
         animRef.current = setInterval(animateStep, 80);
         return () => clearInterval(animRef.current);
     }, [animateStep]);
 
-    // ── Stats ──
     const stats = {
-        enRoute: vehicules.filter(v => v.statut === 'EN_ROUTE').length,
-        enPanne: vehicules.filter(v => v.statut === 'EN_PANNE').length,
-        stationne: vehicules.filter(v => v.statut === 'STATIONNE').length,
-        arrive: vehicules.filter(v => v.statut === 'ARRIVE').length,
+        EN_ROUTE: vehicules.filter((vehicle) => vehicle.statut === 'EN_ROUTE').length,
+        EN_PANNE: vehicules.filter((vehicle) => vehicle.statut === 'EN_PANNE').length,
+        STATIONNE: vehicules.filter((vehicle) => vehicle.statut === 'STATIONNE').length,
+        ARRIVE: vehicules.filter((vehicle) => vehicle.statut === 'ARRIVE').length,
     };
 
     const filtered = filter === 'tous'
         ? vehicules
-        : vehicules.filter(v => v.statut === filter.toUpperCase());
+        : vehicules.filter((vehicle) => vehicle.statut === filter);
+
+    const total = vehicules.length || 1;
+    const activeRate = Math.round(((stats.EN_ROUTE + stats.ARRIVE) / total) * 100);
+    const brokenVehicles = vehicules.filter((vehicle) => vehicle.statut === 'EN_PANNE');
 
     return (
-        <div className="space-y-6">
-
-            {/* ── Header ── */}
-            <div className="flex justify-between items-start">
-                <div>
-                    <h2 className="text-3xl font-extrabold text-white flex items-center gap-3">
-                        <Car className="text-emerald-400 w-8 h-8" />
-                        Flotte de Véhicules — Temps Réel
-                    </h2>
-                    <p className="text-gray-500 mt-1 text-sm">
-                        Suivi GPS en direct des véhicules autonomes de Neo-Sousse 2030
-                        {lastUpdate && <span className="ml-3 text-emerald-400">• {lastUpdate}</span>}
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-                        <Wifi className="w-3 h-3 animate-pulse" /> {connected ? 'Live Socket' : 'Hors ligne'}
+        <section className="mx-auto max-w-7xl animate-fade-in space-y-4 pb-6">
+            <header className="border-b border-white/10 pb-4">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-200/70">
+                            Mobilite urbaine
+                        </p>
+                        <h2 className="mt-1 text-[2rem] font-black leading-tight tracking-tight text-white">
+                            Flotte de <span className="text-gradient">Vehicules</span>
+                        </h2>
+                        <p className="mt-1 text-sm font-medium leading-6 text-slate-400">
+                            Suivi temps reel des vehicules, incidents et mouvements sur Neo-Sousse.
+                        </p>
                     </div>
-                    <button onClick={fetchVehicules}
-                        className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">
-                        <RefreshCw className={`w-5 h-5 text-emerald-400 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-[0.1em] ${connected ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-rose-400/20 bg-rose-400/10 text-rose-300'}`}>
+                            <span className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-300' : 'bg-rose-300'}`} />
+                            {connected ? 'Live' : 'Hors ligne'}
+                        </span>
+                        {lastUpdate && (
+                            <span className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-[11px] font-bold text-slate-400">
+                                Maj {lastUpdate}
+                            </span>
+                        )}
+                        <button
+                            onClick={fetchVehicules}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-300 transition hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-emerald-300"
+                            title="Rafraichir"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </div>
                 </div>
+            </header>
+
+            <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}
+            >
+                <KpiGauge
+                    value={stats.EN_ROUTE}
+                    label="En route"
+                    icon={Navigation}
+                    color="#34d399"
+                    active={filter === 'EN_ROUTE'}
+                    onClick={() => setFilter('EN_ROUTE')}
+                />
+                <KpiGauge
+                    value={stats.EN_PANNE}
+                    label="En panne"
+                    icon={AlertTriangle}
+                    color="#fb3f67"
+                    active={filter === 'EN_PANNE'}
+                    onClick={() => setFilter('EN_PANNE')}
+                />
+                <KpiGauge
+                    value={stats.STATIONNE}
+                    label="Stationne"
+                    icon={ParkingCircle}
+                    color="#cbd5e1"
+                    active={filter === 'STATIONNE'}
+                    onClick={() => setFilter('STATIONNE')}
+                />
+                <KpiGauge
+                    value={stats.ARRIVE}
+                    label="Arrive"
+                    icon={CheckCircle2}
+                    color="#38bdf8"
+                    active={filter === 'ARRIVE'}
+                    onClick={() => setFilter('ARRIVE')}
+                />
+                <KpiGauge
+                    value={vehicules.length}
+                    label="Total flotte"
+                    icon={Activity}
+                    color="#c084fc"
+                    active={filter === 'tous'}
+                    onClick={() => setFilter('tous')}
+                />
             </div>
 
-            {/* ── KPIs ── */}
-            <div className="grid grid-cols-4 gap-4">
-                {[
-                    { label: 'En route', value: stats.enRoute, icon: '🚗', color: 'emerald' },
-                    { label: 'En panne', value: stats.enPanne, icon: '🔧', color: 'red' },
-                    { label: 'Stationnés', value: stats.stationne, icon: '🅿️', color: 'gray' },
-                    { label: 'Arrivés', value: stats.arrive, icon: '🏁', color: 'blue' },
-                ].map(k => (
-                    <motion.div key={k.label}
-                        whileHover={{ scale: 1.02 }}
-                        className={`bg-gray-900/60 border border-${k.color}-500/20 rounded-xl p-4 flex items-center gap-3 cursor-pointer`}
-                        onClick={() => setFilter(k.label === 'En route' ? 'EN_ROUTE' : k.label === 'En panne' ? 'EN_PANNE' : k.label === 'Stationnés' ? 'STATIONNE' : k.label === 'Arrivés' ? 'ARRIVE' : 'tous')}>
-                        <span className="text-3xl">{k.icon}</span>
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+                <main className="min-w-0 rounded-3xl border border-white/10 bg-[#0c1324]/90 p-5 shadow-[0_16px_42px_rgba(0,0,0,0.30)]">
+                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <div className={`text-2xl font-bold text-${k.color}-400`}>{k.value}</div>
-                            <div className="text-xs text-gray-500">{k.label}</div>
+                            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
+                                <MapPin className="h-4 w-4 text-emerald-300" />
+                                Carte GPS
+                            </h3>
+                            <p className="mt-1 text-xs font-medium text-slate-500">
+                                Cliquez sur un vehicule pour voir ses details.
+                            </p>
                         </div>
-                    </motion.div>
-                ))}
-            </div>
 
-            {/* ── Carte + Liste ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Carte GPS interactive */}
-                <div className="lg:col-span-2 bg-gray-900/60 border border-gray-700/40 rounded-2xl p-6 relative">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            <Navigation className="w-4 h-4 text-emerald-400" />
-                            Carte GPS — Neo-Sousse 2030
-                        </h3>
-                        <div className="flex gap-2 text-xs">
-                            {['tous', 'EN_ROUTE', 'EN_PANNE', 'STATIONNE'].map(f => (
-                                <button key={f}
-                                    onClick={() => setFilter(f)}
-                                    className={`px-2 py-1 rounded-lg border transition-colors ${filter === f
-                                            ? 'bg-indigo-600 border-indigo-500 text-white'
-                                            : 'border-gray-700 text-gray-500 hover:text-gray-300'
-                                        }`}>
-                                    {f === 'tous' ? 'Tous' : f.replace('_', ' ')}
+                        <div className="flex flex-wrap gap-2">
+                            {['tous', 'EN_ROUTE', 'EN_PANNE', 'STATIONNE', 'ARRIVE'].map((item) => (
+                                <button
+                                    key={item}
+                                    onClick={() => setFilter(item)}
+                                    className={`rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-[0.08em] transition ${
+                                        filter === item
+                                            ? 'border-purple-300/40 bg-purple-400/15 text-white'
+                                            : 'border-white/10 bg-white/[0.035] text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    {item === 'tous' ? 'Tous' : STATUS_CONFIG[item]?.label}
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <svg viewBox="0 0 100 100" className="w-full h-auto rounded-xl overflow-hidden"
-                        style={{ maxHeight: '480px', background: '#0f172a' }}>
+                    <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#050816]">
+                        <svg viewBox="0 0 100 100" className="h-[500px] w-full">
+                            <defs>
+                                <pattern id="fleet-grid" width="8" height="8" patternUnits="userSpaceOnUse">
+                                    <path d="M 8 0 L 0 0 0 8" fill="none" stroke="rgba(255,255,255,0.035)" strokeWidth="0.4" />
+                                </pattern>
+                            </defs>
+                            <rect width="100" height="100" fill="url(#fleet-grid)" />
 
-                        {/* Routes */}
-                        <line x1="50" y1="0" x2="50" y2="100" stroke="#1e293b" strokeWidth="1.5" />
-                        <line x1="0" y1="50" x2="100" y2="50" stroke="#1e293b" strokeWidth="1.5" />
-                        <line x1="0" y1="0" x2="100" y2="100" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="2,3" />
+                            <line x1="50" y1="0" x2="50" y2="100" stroke="rgba(255,255,255,0.12)" strokeWidth="1.4" />
+                            <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.12)" strokeWidth="1.4" />
+                            <line x1="0" y1="0" x2="100" y2="100" stroke="rgba(255,255,255,0.08)" strokeWidth="0.6" strokeDasharray="2,3" />
+                            <line x1="100" y1="0" x2="0" y2="100" stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" strokeDasharray="2,4" />
 
-                        {/* Zones */}
-                        {ZONES.map(zone => (
-                            <g key={zone.id}>
-                                <rect x={zone.x} y={zone.y} width={zone.w} height={zone.h}
-                                    fill={zone.color} fillOpacity={0.3}
-                                    stroke="rgba(255,255,255,0.08)" strokeWidth={0.3} rx={1} />
-                                <text x={zone.x + zone.w / 2} y={zone.y + 4}
-                                    textAnchor="middle" fontSize="2.5"
-                                    fill="rgba(255,255,255,0.35)"
-                                    className="pointer-events-none select-none">
-                                    {zone.label}
-                                </text>
-                            </g>
-                        ))}
+                            {ZONES.map((zone) => (
+                                <g key={zone.id}>
+                                    <rect
+                                        x={zone.x}
+                                        y={zone.y}
+                                        width={zone.w}
+                                        height={zone.h}
+                                        fill={zone.color}
+                                        fillOpacity={0.22}
+                                        stroke="rgba(255,255,255,0.10)"
+                                        strokeWidth={0.35}
+                                        rx={2}
+                                    />
+                                    <text
+                                        x={zone.x + zone.w / 2}
+                                        y={zone.y + 4.6}
+                                        textAnchor="middle"
+                                        fontSize="2.6"
+                                        fill="rgba(255,255,255,0.48)"
+                                        className="pointer-events-none select-none"
+                                    >
+                                        {zone.label}
+                                    </text>
+                                </g>
+                            ))}
 
-                        {/* Véhicules */}
-                        {vehicules
-                            .filter(v => filter === 'tous' || v.statut === filter)
-                            .map(v => {
-                                const pos = positions[v.id];
-                                if (!pos) return null;
-                                const col = STATUT_COLOR[v.statut]?.bg || '#6b7280';
-                                const isSelected = selected?.id === v.id;
-                                const isMoving = v.statut === 'EN_ROUTE';
+                            {vehicules
+                                .filter((vehicle) => filter === 'tous' || vehicle.statut === filter)
+                                .map((vehicle) => {
+                                    const pos = positions[vehicle.id];
+                                    if (!pos) return null;
 
-                                return (
-                                    <g key={v.id}
-                                        className="cursor-pointer"
-                                        onClick={() => setSelected(v)}>
+                                    const status = STATUS_CONFIG[vehicle.statut] || STATUS_CONFIG.STATIONNE;
+                                    const isSelected = selected?.id === vehicle.id;
+                                    const isMoving = vehicle.statut === 'EN_ROUTE';
+                                    const isBroken = vehicle.statut === 'EN_PANNE';
 
-                                        {/* Traînée mouvement */}
-                                        {isMoving && (
-                                            <circle cx={pos.x} cy={pos.y} r={3}
-                                                fill={col} opacity={0.1 + 0.05 * Math.sin(tick * 0.3)} />
-                                        )}
-
-                                        {/* Sélection */}
-                                        {isSelected && (
-                                            <circle cx={pos.x} cy={pos.y} r={4}
-                                                fill="none" stroke="white" strokeWidth={0.5}
-                                                strokeDasharray="1,1" />
-                                        )}
-
-                                        {/* Pulse pour panne */}
-                                        {v.statut === 'EN_PANNE' && (
-                                            <circle cx={pos.x} cy={pos.y}
-                                                r={3 + 1.5 * Math.abs(Math.sin(tick * 0.15))}
-                                                fill="none" stroke="#ef4444"
-                                                strokeWidth={0.4} opacity={0.6} />
-                                        )}
-
-                                        {/* Corps véhicule */}
-                                        <circle cx={pos.x} cy={pos.y} r={2}
-                                            fill={col} stroke="white" strokeWidth={0.4} />
-
-                                        {/* Icône */}
-                                        <text x={pos.x} y={pos.y + 0.8}
-                                            textAnchor="middle" fontSize="2.2"
-                                            className="pointer-events-none select-none">
-                                            {isMoving ? '🚗' :
-                                                v.statut === 'EN_PANNE' ? '🔧' :
-                                                    v.statut === 'ARRIVE' ? '🏁' : '🅿️'}
-                                        </text>
-
-                                        {/* ID véhicule */}
-                                        <text x={pos.x + 2.5} y={pos.y - 1}
-                                            fontSize="1.8" fill="rgba(255,255,255,0.6)"
-                                            className="pointer-events-none select-none">
-                                            {v.id}
-                                        </text>
-                                    </g>
-                                );
-                            })}
-                    </svg>
-
-                    {/* Légende */}
-                    <div className="flex flex-wrap gap-4 mt-3 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">🚗 En route</span>
-                        <span className="flex items-center gap-1">🔧 En panne</span>
-                        <span className="flex items-center gap-1">🅿️ Stationné</span>
-                        <span className="flex items-center gap-1">🏁 Arrivé</span>
+                                    return (
+                                        <g key={vehicle.id} className="cursor-pointer" onClick={() => setSelected(vehicle)}>
+                                            {isMoving && (
+                                                <circle
+                                                    cx={pos.x}
+                                                    cy={pos.y}
+                                                    r={3.4}
+                                                    fill={status.color}
+                                                    opacity={0.12 + 0.05 * Math.sin(tick * 0.3)}
+                                                />
+                                            )}
+                                            {isBroken && (
+                                                <circle
+                                                    cx={pos.x}
+                                                    cy={pos.y}
+                                                    r={3.3 + 1.4 * Math.abs(Math.sin(tick * 0.15))}
+                                                    fill="none"
+                                                    stroke={status.color}
+                                                    strokeWidth={0.45}
+                                                    opacity={0.7}
+                                                />
+                                            )}
+                                            {isSelected && (
+                                                <circle
+                                                    cx={pos.x}
+                                                    cy={pos.y}
+                                                    r={4.5}
+                                                    fill="none"
+                                                    stroke="white"
+                                                    strokeWidth={0.55}
+                                                    strokeDasharray="1,1"
+                                                />
+                                            )}
+                                            <circle cx={pos.x} cy={pos.y} r={2.1} fill={status.color} stroke="white" strokeWidth={0.42} />
+                                            <text
+                                                x={pos.x + 2.8}
+                                                y={pos.y - 1.2}
+                                                fontSize="1.9"
+                                                fill="rgba(255,255,255,0.7)"
+                                                className="pointer-events-none select-none"
+                                            >
+                                                V{vehicle.id}
+                                            </text>
+                                        </g>
+                                    );
+                                })}
+                        </svg>
                     </div>
-                </div>
 
-                {/* Panel droite */}
-                <div className="space-y-4">
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs font-bold text-slate-400 md:grid-cols-4">
+                        {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+                            <div key={key} className="flex items-center gap-2">
+                                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: config.color }} />
+                                {config.label}
+                            </div>
+                        ))}
+                    </div>
+                </main>
 
-                    {/* Détail véhicule sélectionné */}
+                <aside className="space-y-5">
                     <AnimatePresence mode="wait">
                         {selected && (
-                            <motion.div key={selected.id}
-                                initial={{ opacity: 0, y: -10 }}
+                            <motion.div
+                                key={selected.id}
+                                initial={{ opacity: 0, y: -8 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0 }}
-                                className="bg-gray-800/60 border border-indigo-500/30 rounded-xl p-4">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div>
-                                        <h4 className="font-bold text-white text-lg">
-                                            {TYPE_EMOJI(selected.type)} Véhicule #{selected.id}
-                                        </h4>
-                                        <p className="text-xs text-gray-500 capitalize">{selected.type}</p>
+                                exit={{ opacity: 0, y: -8 }}
+                                className="rounded-3xl border border-purple-300/20 bg-[#0c1324]/90 p-5 shadow-[0_16px_42px_rgba(0,0,0,0.30)]"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-400/10 text-purple-200">
+                                            {React.createElement(getVehicleIcon(selected.type), { className: 'h-6 w-6' })}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-lg font-black text-white">
+                                                Vehicule V-{String(selected.id).padStart(3, '0')}
+                                            </h4>
+                                            <p className="text-xs font-semibold capitalize text-slate-400">{selected.type}</p>
+                                        </div>
                                     </div>
-                                    <button onClick={() => setSelected(null)}
-                                        className="text-gray-500 hover:text-white">✕</button>
+                                    <button
+                                        onClick={() => setSelected(null)}
+                                        className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-white/5 hover:text-white"
+                                        title="Fermer"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
                                 </div>
 
-                                <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border mb-4 ${STATUT_COLOR[selected.statut]?.badge}`}>
-                                    {selected.statut === 'EN_ROUTE' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                                    {selected.statut}
+                                <div className={`mt-4 inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-black uppercase tracking-[0.1em] ${STATUS_CONFIG[selected.statut]?.badge}`}>
+                                    {React.createElement(STATUS_CONFIG[selected.statut]?.icon || Car, { className: 'h-4 w-4' })}
+                                    {STATUS_CONFIG[selected.statut]?.label || selected.statut}
                                 </div>
 
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">ID</span>
-                                        <span className="text-white font-mono">V-{String(selected.id).padStart(3, '0')}</span>
+                                <div className="mt-5 space-y-3 text-sm">
+                                    <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                                        <span className="text-slate-400">Identifiant</span>
+                                        <span className="font-mono font-black text-white">V-{String(selected.id).padStart(3, '0')}</span>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">Type</span>
-                                        <span className="text-white capitalize">{selected.type}</span>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-400">Type</span>
+                                        <span className="font-bold capitalize text-white">{selected.type}</span>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">Trajet ID</span>
-                                        <span className="text-white">{selected.trajet_id || '—'}</span>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-400">Trajet</span>
+                                        <span className="font-bold text-white">{selected.trajet_id || '-'}</span>
                                     </div>
-                                    {selected.statut === 'EN_ROUTE' && (
-                                        <div className="mt-3 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
-                                            <Navigation className="w-3 h-3 animate-pulse" />
-                                            Déplacement en cours...
-                                        </div>
-                                    )}
-                                    {selected.statut === 'EN_PANNE' && (
-                                        <div className="mt-3 p-2 bg-red-500/10 rounded-lg border border-red-500/20 text-xs text-red-300 flex items-center gap-2">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            Intervention requise
-                                        </div>
-                                    )}
                                 </div>
+
+                                {selected.statut === 'EN_ROUTE' && (
+                                    <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-semibold text-emerald-200">
+                                        Deplacement en cours sur le reseau urbain.
+                                    </div>
+                                )}
+                                {selected.statut === 'EN_PANNE' && (
+                                    <div className="mt-5 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm font-semibold text-rose-200">
+                                        Intervention technique requise.
+                                    </div>
+                                )}
                             </motion.div>
                         )}
                     </AnimatePresence>
 
-                    {/* Liste véhicules */}
-                    <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <Activity className="w-3 h-3" />
-                            Flotte ({filtered.length})
-                        </h4>
-                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                            {filtered.map(v => {
-                                const col = STATUT_COLOR[v.statut];
+                    <div className="rounded-3xl border border-white/10 bg-[#0c1324]/90 p-5 shadow-[0_16px_42px_rgba(0,0,0,0.30)]">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-300">
+                                <Activity className="h-4 w-4 text-purple-300" />
+                                Flotte
+                            </h3>
+                            <span className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-black text-white">
+                                {filtered.length}
+                            </span>
+                        </div>
+
+                        <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                            {filtered.map((vehicle) => {
+                                const Icon = getVehicleIcon(vehicle.type);
+                                const status = STATUS_CONFIG[vehicle.statut] || STATUS_CONFIG.STATIONNE;
                                 return (
-                                    <motion.div key={v.id}
-                                        whileHover={{ x: 2 }}
-                                        onClick={() => setSelected(v)}
-                                        className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${selected?.id === v.id
-                                                ? 'bg-indigo-500/10 border border-indigo-500/20'
-                                                : 'hover:bg-gray-800/60'
-                                            }`}>
-                                        <span className="text-lg">{TYPE_EMOJI(v.type)}</span>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium text-white">
-                                                V-{String(v.id).padStart(3, '0')}
-                                                <span className="ml-1 text-gray-500 text-xs capitalize">· {v.type}</span>
-                                            </div>
+                                    <button
+                                        key={vehicle.id}
+                                        onClick={() => setSelected(vehicle)}
+                                        className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${
+                                            selected?.id === vehicle.id
+                                                ? 'border-purple-300/30 bg-purple-400/10'
+                                                : 'border-transparent bg-white/[0.025] hover:border-white/10 hover:bg-white/[0.05]'
+                                        }`}
+                                    >
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-slate-200">
+                                            <Icon className="h-5 w-5" />
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${col?.badge}`}>
-                                            {v.statut === 'EN_ROUTE' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1" />}
-                                            {v.statut.replace('_', ' ')}
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-black text-white">
+                                                V-{String(vehicle.id).padStart(3, '0')}
+                                            </p>
+                                            <p className="truncate text-xs font-semibold capitalize text-slate-500">{vehicle.type}</p>
+                                        </div>
+                                        <span className={`rounded-xl border px-2 py-1 text-[10px] font-black uppercase ${status.badge}`}>
+                                            {status.label}
                                         </span>
-                                    </motion.div>
+                                    </button>
                                 );
                             })}
                         </div>
                     </div>
 
-                    {/* Alertes véhicules */}
-                    {stats.enPanne > 0 && (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
-                            <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                <AlertTriangle className="w-3 h-3" /> Pannes actives
-                            </h4>
-                            {vehicules.filter(v => v.statut === 'EN_PANNE').map(v => (
-                                <div key={v.id} className="text-xs text-red-300 py-1 border-b border-red-500/10 last:border-0">
-                                    {TYPE_EMOJI(v.type)} Véhicule {v.id} ({v.type}) — Intervention requise
-                                </div>
-                            ))}
+                    <div className="rounded-3xl border border-white/10 bg-[#0c1324]/90 p-5 shadow-[0_16px_42px_rgba(0,0,0,0.30)]">
+                        <div className="mb-4 flex items-center gap-2">
+                            <Wrench className="h-4 w-4 text-rose-300" />
+                            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-300">
+                                Diagnostic
+                            </h3>
                         </div>
-                    )}
-
-                    {/* Stats par type */}
-                    <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-4">
-                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
-                            Par type de véhicule
-                        </h4>
-                        {['bus', 'voiture', 'camion', 'moto', 'scooter'].map(type => {
-                            const count = vehicules.filter(v => v.type === type).length;
-                            if (!count) return null;
-                            return (
-                                <div key={type} className="flex justify-between items-center py-1 text-xs">
-                                    <span className="text-gray-400">{TYPE_EMOJI(type)} {type}</span>
-                                    <span className="text-white font-bold">{count}</span>
+                        <div className="space-y-3">
+                            <div>
+                                <div className="mb-2 flex justify-between text-xs font-black uppercase tracking-[0.12em]">
+                                    <span className="text-slate-400">Disponibilite</span>
+                                    <span className="text-emerald-300">{activeRate}%</span>
                                 </div>
-                            );
-                        })}
+                                <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" style={{ width: `${activeRate}%` }} />
+                                </div>
+                            </div>
+
+                            {brokenVehicles.length > 0 ? (
+                                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3">
+                                    <p className="text-xs font-black uppercase tracking-[0.12em] text-rose-200">
+                                        {brokenVehicles.length} panne(s) active(s)
+                                    </p>
+                                    <div className="mt-2 space-y-1">
+                                        {brokenVehicles.slice(0, 4).map((vehicle) => (
+                                            <p key={vehicle.id} className="text-xs font-semibold text-rose-100/85">
+                                                V-{String(vehicle.id).padStart(3, '0')} - {vehicle.type}
+                                            </p>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
+                                    Aucune panne active
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
+                </aside>
             </div>
-        </div>
+        </section>
     );
 }

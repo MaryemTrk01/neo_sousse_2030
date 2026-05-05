@@ -1,14 +1,35 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, Send, History, Sparkles, AlertCircle, CheckCircle2, ChevronRight, Copy } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    AlertCircle,
+    ArrowRight,
+    CheckCircle2,
+    Clipboard,
+    Code2,
+    Database,
+    History,
+    Loader2,
+    Play,
+    Rows3,
+    Search,
+    ShieldCheck,
+    Sparkles,
+    Terminal,
+} from 'lucide-react';
 
 const EXAMPLES = [
-    "Affiche tous les capteurs actifs",
+    'Affiche tous les capteurs actifs',
     "Combien d'interventions sont en cours ?",
-    "Quels sont les citoyens avec un score > 80 ?",
-    "Montre les mesures de température de la zone nord",
-    "Liste les véhicules en panne",
+    'Quels sont les citoyens avec un score > 80 ?',
+    'Montre les mesures de temperature de la zone nord',
+    'Liste les vehicules en panne',
+];
+
+const compilerStats = [
+    { label: 'Entree', value: 'Francais', icon: Sparkles, tone: 'text-purple-300 bg-purple-400/10 border-purple-400/20' },
+    { label: 'Sortie', value: 'SQL', icon: Code2, tone: 'text-sky-300 bg-sky-400/10 border-sky-400/20' },
+    { label: 'Execution', value: 'Live DB', icon: Database, tone: 'text-emerald-300 bg-emerald-400/10 border-emerald-400/20' },
 ];
 
 export default function Compilateur({ apiBase }) {
@@ -16,180 +37,331 @@ export default function Compilateur({ apiBase }) {
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(false);
     const [history, setHistory] = useState([]);
+    const [copied, setCopied] = useState(false);
 
     const handleCompile = async (q = query) => {
-        if (!q) return;
+        const cleanQuery = q.trim();
+        if (!cleanQuery || loading) return;
+
         setLoading(true);
+        setCopied(false);
+
         try {
-            const res = await axios.post(`${apiBase}/compiler`, { query: q });
+            const res = await axios.post(`${apiBase}/compiler`, { query: cleanQuery });
             setResult(res.data);
+
             if (res.data.success) {
-                setHistory(prev => [q, ...prev.filter(h => h !== q)].slice(0, 10));
+                setHistory((prev) => [cleanQuery, ...prev.filter((h) => h !== cleanQuery)].slice(0, 10));
             }
         } catch (err) {
             console.error(err);
+            setResult({
+                success: false,
+                sql: '',
+                rows: [],
+                row_count: 0,
+                errors: ['Impossible de joindre le service de compilation.'],
+            });
         } finally {
             setLoading(false);
         }
     };
 
+    const copySql = async () => {
+        if (!result?.sql) return;
+
+        await navigator.clipboard.writeText(result.sql);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+    };
+
+    const runExample = (example) => {
+        setQuery(example);
+        handleCompile(example);
+    };
+
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const hasRows = result?.success && rows.length > 0;
+
     return (
-        <div className="max-w-6xl mx-auto space-y-10 animate-fade-in">
-            <header className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-4xl font-black text-white tracking-tighter">
-                        Compilateur <span className="text-gradient">NL-SQL</span>
-                    </h2>
-                    <p className="text-text-muted font-medium mt-1">Abstraction sémantique et exécution de requêtes relationnelles • Neo-Sousse Core</p>
-                </div>
-                <div className="p-4 neo-glass rounded-2xl border border-white/5">
-                    <Terminal className="w-8 h-8 text-turquoise" />
+        <section className="mx-auto max-w-7xl animate-fade-in space-y-5 pb-6">
+            <header className="overflow-hidden rounded-3xl border border-white/10 bg-[#080d1b]/90 shadow-[0_20px_60px_rgba(0,0,0,0.38)]">
+                <div className="grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_520px]">
+                    <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-purple-300/25 bg-gradient-to-br from-purple-500/25 to-pink-500/15 shadow-[0_0_28px_rgba(168,85,247,0.22)]">
+                            <Terminal className="h-7 w-7 text-purple-100" />
+                        </div>
+
+                        <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-purple-200/70">
+                                Module de compilation
+                            </p>
+                            <h2 className="mt-1 text-3xl font-black tracking-tight text-white">
+                                Compilateur <span className="text-gradient">NL-SQL</span>
+                            </h2>
+                            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-300">
+                                Transformez une demande en francais en requete SQL executable sur la base Neo-Sousse.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                        {compilerStats.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                                <div key={item.label} className={`rounded-2xl border p-3 ${item.tone}`}>
+                                    <Icon className="h-4 w-4" />
+                                    <p className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] opacity-70">
+                                        {item.label}
+                                    </p>
+                                    <p className="mt-1 text-sm font-black text-white">{item.value}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                <div className="lg:col-span-3 space-y-8">
-                    {/* Futuristic Search Section */}
-                    <div className="neo-card p-1 bg-gradient-to-r from-turquoise/20 to-sand/10">
-                        <div className="bg-bg-deep rounded-[1.4rem] p-8">
-                            <div className="flex gap-4 relative">
-                                <div className="flex-1 relative group">
-                                    <Sparkles className="absolute left-6 top-1/2 -translate-y-1/2 text-turquoise w-6 h-6 group-focus-within:animate-pulse" />
-                                    <input
-                                        type="text"
-                                        value={query}
-                                        onChange={e => setQuery(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleCompile()}
-                                        placeholder="Décrivez votre requête en français (ex: liste les capteurs de la zone corniche)..."
-                                        className="w-full bg-black/40 border border-white/5 rounded-2xl pl-16 pr-6 py-5 text-lg text-white focus:outline-none focus:border-turquoise/50 transition-all placeholder-white/20 font-medium"
-                                    />
-                                </div>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_330px]">
+                <main className="min-w-0 space-y-6">
+                    <div className="rounded-3xl border border-white/10 bg-[#0c1324]/90 p-5 shadow-[0_16px_42px_rgba(0,0,0,0.30)]">
+                        <div className="flex flex-col gap-3">
+                            <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-slate-400">
+                                <Search className="h-4 w-4 text-purple-300" />
+                                Requete naturelle
+                            </label>
+
+                            <div className="relative">
+                                <textarea
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleCompile();
+                                        }
+                                    }}
+                                    rows={3}
+                                    placeholder="Exemple: liste les capteurs actifs dans la zone nord..."
+                                    className="w-full min-h-[118px] resize-none rounded-2xl border border-white/10 bg-white/[0.055] px-5 py-4 pr-16 text-base font-medium leading-7 text-white shadow-inner transition placeholder:text-slate-500 focus:bg-white/[0.075]"
+                                />
+
                                 <button
                                     onClick={() => handleCompile()}
-                                    disabled={loading}
-                                    className="btn-primary flex items-center gap-3 px-10 shadow-turquoise/20"
+                                    disabled={!query.trim() || loading}
+                                    className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-purple-400 to-pink-500 text-white shadow-[0_12px_28px_rgba(168,85,247,0.34)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                                    title="Executer"
                                 >
-                                    {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="w-5 h-5" />}
-                                    <span className="font-black uppercase tracking-widest text-xs">Exécuter</span>
+                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                                 </button>
                             </div>
+                        </div>
 
-                            <div className="mt-8">
-                                <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                    <span className="w-8 h-[1px] bg-white/5"></span> Requêtes suggérées
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {EXAMPLES.map(ex => (
-                                        <button
-                                            key={ex}
-                                            onClick={() => { setQuery(ex); handleCompile(ex); }}
-                                            className="px-4 py-2 bg-white/5 hover:bg-turquoise hover:text-black border border-white/5 rounded-xl text-[10px] font-black text-text-muted transition-all uppercase tracking-widest"
-                                        >
-                                            {ex}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {EXAMPLES.map((example) => (
+                                <button
+                                    key={example}
+                                    onClick={() => runExample(example)}
+                                    className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.06em] text-slate-300 transition hover:border-purple-300/30 hover:bg-purple-400/10 hover:text-white"
+                                >
+                                    {example}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
                     <AnimatePresence mode="wait">
-                        {result && (
-                            <motion.div key={result.nl_input} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
-                                {/* SQL Panel */}
-                                <div className="neo-card p-8 border-sand/20 bg-sand/5 relative group">
-                                    <div className="absolute -right-4 -top-4 w-32 h-32 bg-sand/5 blur-3xl rounded-full" />
-                                    <div className="flex justify-between items-center mb-6">
-                                        <p className="text-[10px] font-black text-sand uppercase tracking-[0.3em] flex items-center gap-3">
-                                            <div className="w-2 h-2 rounded-full bg-sand animate-pulse" />
-                                            Génération SQL Optimisée
-                                        </p>
-                                        <button className="p-2 hover:bg-white/5 rounded-xl transition-colors text-sand/60">
-                                            <Copy className="w-4 h-4" />
+                        {result ? (
+                            <motion.div
+                                key={result.sql || result.errors?.join('-') || 'result'}
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -12 }}
+                                className="space-y-6"
+                            >
+                                <div className="rounded-[2rem] border border-white/10 bg-[#0c1324]/90 shadow-[0_18px_50px_rgba(0,0,0,0.34)]">
+                                    <div className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${result.success ? 'bg-emerald-400/10 text-emerald-300' : 'bg-rose-400/10 text-rose-300'}`}>
+                                                {result.success ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-white">
+                                                    {result.success ? 'Compilation reussie' : 'Compilation bloquee'}
+                                                </p>
+                                                <p className="text-xs font-semibold text-slate-400">
+                                                    SQL genere par le moteur semantique
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={copySql}
+                                            disabled={!result.sql}
+                                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-300 transition hover:border-purple-300/30 hover:bg-purple-400/10 disabled:cursor-not-allowed disabled:opacity-30"
+                                        >
+                                            <Clipboard className="h-4 w-4" />
+                                            {copied ? 'Copie' : 'Copier'}
                                         </button>
                                     </div>
-                                    <div className="relative">
-                                        <pre className="font-mono text-sand text-base overflow-x-auto p-6 bg-black/60 rounded-2xl border border-white/5 shadow-inner">
-                                            {result.sql || "-- Synthèse impossible --"}
+
+                                    <div className="p-6">
+                                        <pre className="min-h-[120px] overflow-x-auto rounded-2xl border border-white/10 bg-[#050816] p-5 font-mono text-sm leading-7 text-purple-100 shadow-inner">
+                                            {result.sql || '-- Requete SQL indisponible --'}
                                         </pre>
-                                    </div>
-                                    
-                                    {result.errors.length > 0 && (
-                                        <div className="mt-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex gap-4 text-rose-400 animate-shake">
-                                            <AlertCircle className="w-6 h-6 shrink-0" />
-                                            <div className="text-sm">
-                                                <p className="font-black uppercase tracking-widest text-[10px] mb-1">Violation de contrainte sémantique</p>
-                                                <ul className="opacity-80 font-medium">
-                                                    {result.errors.map((e, i) => <li key={i}>• {e}</li>)}
-                                                </ul>
+
+                                        {Array.isArray(result.errors) && result.errors.length > 0 && (
+                                            <div className="mt-5 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-rose-100">
+                                                <div className="flex gap-3">
+                                                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />
+                                                    <div>
+                                                        <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-200">
+                                                            Erreurs detectees
+                                                        </p>
+                                                        <ul className="mt-2 space-y-1 text-sm font-medium leading-6 text-rose-100/85">
+                                                            {result.errors.map((error, index) => (
+                                                                <li key={index}>{error}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
 
-                                {/* Results Grid */}
-                                {result.success && result.rows && (
-                                    <div className="neo-card overflow-hidden">
-                                        <div className="p-6 border-b border-white/5 bg-turquoise/5 flex justify-between items-center">
+                                {result.success && (
+                                    <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#0c1324]/90 shadow-[0_18px_50px_rgba(0,0,0,0.34)]">
+                                        <div className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
                                             <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-turquoise/20 rounded-lg"><CheckCircle2 className="w-4 h-4 text-turquoise" /></div>
-                                                <span className="text-[11px] font-black text-white uppercase tracking-[0.2em]">Ensemble de Résultats</span>
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-400/10 text-sky-300">
+                                                    <Rows3 className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-black text-white">Resultats</p>
+                                                    <p className="text-xs font-semibold text-slate-400">
+                                                        Donnees retournees par la base
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <span className="px-3 py-1 bg-white/5 rounded-full text-[10px] font-black text-turquoise uppercase tracking-widest">{result.row_count} Entités</span>
+                                            <span className="rounded-xl border border-sky-300/20 bg-sky-400/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-sky-200">
+                                                {result.row_count ?? rows.length} lignes
+                                            </span>
                                         </div>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead>
-                                                    <tr className="bg-black/20 border-b border-white/5">
-                                                        {result.rows.length > 0 && Object.keys(result.rows[0]).map(key => (
-                                                            <th key={key} className="px-8 py-5 text-[10px] font-black text-text-dim uppercase tracking-widest">{key}</th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-white/5">
-                                                    {result.rows.map((row, i) => (
-                                                        <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                                                            {Object.values(row).map((val, j) => (
-                                                                <td key={j} className="px-8 py-4 text-sm font-bold text-white/90">{val === null ? "—" : String(val)}</td>
+
+                                        {hasRows ? (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left">
+                                                    <thead>
+                                                        <tr className="border-b border-white/10 bg-white/[0.03]">
+                                                            {Object.keys(rows[0]).map((key) => (
+                                                                <th key={key} className="px-6 py-4 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                                                    {key}
+                                                                </th>
                                                             ))}
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-white/10">
+                                                        {rows.map((row, rowIndex) => (
+                                                            <tr key={rowIndex} className="transition hover:bg-white/[0.025]">
+                                                                {Object.values(row).map((value, valueIndex) => (
+                                                                    <td key={valueIndex} className="px-6 py-4 text-sm font-semibold text-slate-100">
+                                                                        {value === null ? '-' : String(value)}
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="px-6 py-12 text-center">
+                                                <p className="text-sm font-semibold text-slate-400">
+                                                    La requete est valide, mais aucune ligne ne correspond.
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </motion.div>
+                        ) : (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] px-8 py-10 text-center"
+                            >
+                                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-400/10 text-purple-200">
+                                    <ArrowRight className="h-6 w-6" />
+                                </div>
+                                <h3 className="mt-4 text-lg font-black text-white">Pret a compiler</h3>
+                                <p className="mx-auto mt-2 max-w-lg text-sm font-medium leading-6 text-slate-400">
+                                    Saisissez une demande en langage naturel ou utilisez une question rapide pour generer la requete SQL.
+                                </p>
+                            </motion.div>
                         )}
                     </AnimatePresence>
-                </div>
+                </main>
 
-                {/* Historical Log */}
-                <div className="space-y-6">
-                    <div className="neo-card p-8 min-h-[500px] flex flex-col">
-                        <h4 className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
-                            <History className="w-4 h-4 text-turquoise" /> Log d'Audit
-                        </h4>
-                        <div className="space-y-3 flex-1">
-                            {history.length > 0 ? history.map((h, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => { setQuery(h); handleCompile(h); }}
-                                    className="w-full text-left p-4 rounded-2xl bg-white/5 hover:bg-turquoise/10 border border-transparent hover:border-turquoise/30 transition-all group relative overflow-hidden"
-                                >
-                                    <span className="text-[11px] font-bold text-text-muted group-hover:text-white transition-colors line-clamp-2 pr-6 uppercase tracking-tight">{h}</span>
-                                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-turquoise opacity-0 group-hover:opacity-100 transition-all" />
-                                </button>
-                            )) : (
-                                <div className="flex-1 flex flex-col items-center justify-center text-center opacity-20 py-20">
-                                    <Terminal className="w-12 h-12 mb-4" />
-                                    <p className="text-[10px] font-black uppercase tracking-widest">En attente de commandes</p>
+                <aside className="space-y-6">
+                    <div className="rounded-[2rem] border border-white/10 bg-[#0c1324]/90 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.34)]">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+                                <ShieldCheck className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-black text-white">Pipeline verifie</p>
+                                <p className="text-xs font-semibold text-slate-400">NL vers SQL puis execution</p>
+                            </div>
+                        </div>
+
+                        <div className="mt-5 space-y-3 text-sm">
+                            <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                                <span className="text-slate-400">Statut</span>
+                                <span className={loading ? 'font-black text-amber-300' : 'font-black text-emerald-300'}>
+                                    {loading ? 'Compilation' : 'Disponible'}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-400">Historique</span>
+                                <span className="font-black text-white">{history.length}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-[2rem] border border-white/10 bg-[#0c1324]/90 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.34)]">
+                        <div className="mb-4 flex items-center gap-2">
+                            <History className="h-4 w-4 text-purple-300" />
+                            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-300">
+                                Historique
+                            </h3>
+                        </div>
+
+                        <div className="space-y-3">
+                            {history.length > 0 ? (
+                                history.map((item, index) => (
+                                    <button
+                                        key={`${item}-${index}`}
+                                        onClick={() => runExample(item)}
+                                        className="group relative w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left transition hover:border-purple-300/30 hover:bg-purple-400/10"
+                                    >
+                                        <span className="block pr-6 text-sm font-semibold leading-6 text-slate-200">
+                                            {item}
+                                        </span>
+                                        <ArrowRight className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-300 opacity-0 transition group-hover:opacity-100" />
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="rounded-2xl border border-dashed border-white/10 px-5 py-10 text-center">
+                                    <Terminal className="mx-auto h-9 w-9 text-slate-600" />
+                                    <p className="mt-3 text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+                                        Aucune requete
+                                    </p>
                                 </div>
                             )}
                         </div>
                     </div>
-                </div>
+                </aside>
             </div>
-        </div>
+        </section>
     );
 }

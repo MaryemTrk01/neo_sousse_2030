@@ -188,7 +188,7 @@ function AppContent() {
                 vehiculesPanne={vehiculesPanne}
             />
 
-            <main className="ml-64 min-h-screen p-8">
+            <main className="ml-64 min-h-screen p-6">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={activePage}

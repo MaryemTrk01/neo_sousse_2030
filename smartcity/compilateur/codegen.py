@@ -84,6 +84,9 @@ class SQLGenerator:
         op = cond.operator
         val = cond.value
 
+        if self.node.entity == "interventions" and col == "statut" and val == "en_cours":
+            return "statut != 'TERMINE'"
+
         if isinstance(val, str):
             return f"{col} {op} '{val}'"
         elif isinstance(val, float):
